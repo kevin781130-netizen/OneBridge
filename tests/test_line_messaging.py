@@ -93,6 +93,20 @@ class FakeService:
         return []
 
 
+class FakeScheduler:
+    def __init__(self):
+        self.task_ids = []
+
+    def schedule(self, task_id):
+        self.task_ids.append(task_id)
+
+        class Dispatch:
+            job_id = "job-line"
+            status = "queued"
+
+        return Dispatch()
+
+
 class FakeClient:
     def __init__(self):
         self.replies = []
@@ -138,3 +152,23 @@ def test_line_controller_status_command():
     result = controller.handle(body, signature=signed(body))
     assert result[0]["action"] == "status"
     assert "OneBridge 正在處理任務" in client.replies[0][1]
+
+
+def test_line_controller_dispatches_submitted_task_when_scheduler_present():
+    service = FakeService()
+    client = FakeClient()
+    scheduler = FakeScheduler()
+    controller = LineWebhookController(
+        service=service,
+        client=client,
+        channel_secret=SECRET,
+        tenant_id="tenant-line",
+        required_outputs=("content",),
+        task_scheduler=scheduler,
+    )
+    body = webhook("Ship this")
+    result = controller.handle(body, signature=signed(body))
+
+    task_id = service.contracts[0].task_id
+    assert scheduler.task_ids == [task_id]
+    assert result[0]["status"] == "queued"
