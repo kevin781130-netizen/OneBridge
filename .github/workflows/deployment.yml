@@ -1,0 +1,33 @@
+name: Deployment
+
+on:
+  pull_request:
+    paths:
+      - "deployment/**"
+      - "pyproject.toml"
+      - "src/**"
+      - ".github/workflows/deployment.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "deployment/**"
+      - "pyproject.toml"
+      - "src/**"
+      - ".github/workflows/deployment.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate compose model
+        run: docker compose -f deployment/docker-compose.yml config
+
+      - name: Build OneBridge container
+        run: docker build -f deployment/Dockerfile -t onebridge-ci .
