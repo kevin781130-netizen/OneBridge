@@ -23,7 +23,7 @@ The repository now contains a runnable foundation with substantial infrastructur
 - Artifact/release SHA-256 integrity verification.
 - Approval-gated release manifest builder.
 - Mock end-to-end workflow: content -> design -> code/test -> review.
-- FastAPI endpoints for submit/status/artifacts/run/approve/retry/cancel.
+- FastAPI endpoints for submit/status/artifacts/run/revise/compare/approve/release-gate/release/retry/cancel.
 - CI tests, security/SBOM workflow, and local infrastructure compose for PostgreSQL + MinIO.
 
 Flowise can now switch from the mock to a real Prediction API adapter through environment configuration. Open Design, Hermes, and OpenClaw remain the next real integrations.
@@ -119,3 +119,33 @@ export ONEBRIDGE_FLOWISE_API_KEY=<chatflow-api-key>
 ```
 
 For a remote HTTPS Flowise URL, OneBridge derives a narrow egress rule for the configured host and the `/api/v1` path. Arbitrary `overrideConfig` keys are blocked unless explicitly listed in `ONEBRIDGE_FLOWISE_ALLOWED_OVERRIDE_KEYS`.
+
+
+## Review and release
+
+Generated text/HTML/JSON artifacts can be revised without overwriting history. A new human revision supersedes the previous latest revision, returns to `awaiting_review`, and must be explicitly approved. Two artifact revisions can be compared through the bounded compare endpoint.
+
+Release is fail closed:
+
+```text
+latest required artifacts
+        -> all present
+        -> all approved
+        -> SHA-256 shape valid
+        -> task succeeded
+        -> release manifest artifact
+```
+
+Useful endpoints:
+
+```text
+POST /api/v1/tasks/{task_id}/artifacts/{artifact_id}/revisions
+GET  /api/v1/tasks/{task_id}/artifacts/{left_id}/compare/{right_id}
+GET  /api/v1/tasks/{task_id}/release-gate
+POST /api/v1/tasks/{task_id}/release
+GET  /api/v1/adapters
+```
+
+## OpenClaw shim
+
+`OpenClawOneBridgeShim` is intentionally stateless. It exposes the planned OneBridge tool surface—submit, status, artifacts, approve, retry, and cancel—without reading OneBridge's database or invoking workers directly. OpenClaw-native registration remains a thin integration layer on top of this client.
