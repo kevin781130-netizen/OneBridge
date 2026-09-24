@@ -58,6 +58,7 @@ def build_service(settings: Settings | None = None) -> OneBridgeService:
         audit=HashChainAuditLog(settings.audit_log),
         checkpoints=CheckpointStore(settings.checkpoint_root),
         telemetry=telemetry,
+        output_routes=settings.output_routes,
     )
 
 
