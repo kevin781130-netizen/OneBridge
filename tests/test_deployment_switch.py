@@ -103,3 +103,36 @@ def test_remote_plain_http_deployment_is_blocked(tmp_path: Path):
             endpoint="http://example.com:4101/health",
             version="2026.9.1",
         )
+
+
+def test_stale_health_evidence_blocks_promotion(tmp_path: Path):
+    deployments = service(tmp_path)
+    deployments.register(
+        "openclaw",
+        "green",
+        endpoint="http://127.0.0.1:4102/health",
+        version="2026.9.6",
+    )
+    deployments.record_health("openclaw", "green", healthy())
+
+    from sqlalchemy import select
+    from onebridge.db import DeploymentRecord
+
+    with deployments.db.Session() as session:
+        row = session.scalar(
+            select(DeploymentRecord).where(
+                DeploymentRecord.service == "openclaw",
+                DeploymentRecord.slot == "green",
+            )
+        )
+        row.health_evidence_json = (
+            '{"healthy":true,"status_code":200,'
+            '"latency_ms":1,"content_type":"application/json",'
+            '"body_sha256":"' + ("d" * 64) + '",'
+            '"reported_ok":true,'
+            '"checked_at":"2000-01-01T00:00:00+00:00"}'
+        )
+        session.commit()
+
+    with pytest.raises(ValueError):
+        deployments.promote("openclaw", "green")
