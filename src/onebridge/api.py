@@ -302,8 +302,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 endpoint=str(payload.get("endpoint") or ""),
                 version=str(payload.get("version") or ""),
             )
-        except DeploymentActuatorError as exc:
-            raise HTTPException(status_code=502, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         audit = getattr(service, "audit", None)
@@ -351,6 +349,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_code=404,
                 detail="deployment slot not found",
             ) from exc
+        except DeploymentActuatorError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         audit = getattr(service, "audit", None)
