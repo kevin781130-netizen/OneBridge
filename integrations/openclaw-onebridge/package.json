@@ -14,13 +14,14 @@
     "plugin:validate": "npm run build && openclaw plugins validate --entry ./dist/index.js"
   },
   "dependencies": {
-    "typebox": "^1.1.38"
+    "typebox": "1.1.38"
   },
   "peerDependencies": {
     "openclaw": ">=2026.5.17"
   },
   "devDependencies": {
-    "typescript": "^5.9.0"
+    "typescript": "5.9.2",
+    "openclaw": "2026.9.6"
   },
   "openclaw": {
     "extensions": [
