@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import asdict
 from uuid import uuid4
 
@@ -13,6 +14,7 @@ from .contracts import ApprovalRequest, ArtifactManifest, TaskContract, TextArti
 from .db import ApprovalRecord, ArtifactRecord, Database, ProjectRecord, TaskRecord
 from .release import build_release_manifest
 from .release_gate import evaluate_release_gate
+from .telemetry import Telemetry
 
 
 OUTPUT_ADAPTER = {
@@ -24,10 +26,18 @@ OUTPUT_ADAPTER = {
 
 
 class OneBridgeService:
-    def __init__(self, db: Database, registry: AdapterRegistry, store: LocalObjectStore | S3ObjectStore) -> None:
+    def __init__(
+        self,
+        db: Database,
+        registry: AdapterRegistry,
+        store: LocalObjectStore | S3ObjectStore,
+        *,
+        telemetry: Telemetry | None = None,
+    ) -> None:
         self.db = db
         self.registry = registry
         self.store = store
+        self.telemetry = telemetry or Telemetry.disabled()
 
     def submit(self, contract: TaskContract) -> dict:
         with self.db.Session() as session:
@@ -144,7 +154,35 @@ class OneBridgeService:
                         for item in self.artifacts(task_id)
                     ],
                 )
-                result = adapter.execute(request)
+                adapter_attributes = {
+                    "onebridge.adapter": adapter.name,
+                    "onebridge.adapter_version": adapter.version,
+                    "onebridge.task_id": contract.task_id,
+                    "onebridge.project_id": contract.project_id,
+                }
+                adapter_started = time.monotonic()
+                try:
+                    with self.telemetry.span(
+                        "onebridge.adapter.execute",
+                        adapter_attributes,
+                    ):
+                        result = adapter.execute(request)
+                except Exception:
+                    self.telemetry.count(
+                        "onebridge.adapter.failures",
+                        attributes=adapter_attributes,
+                    )
+                    raise
+                else:
+                    self.telemetry.count(
+                        "onebridge.adapter.calls",
+                        attributes=adapter_attributes,
+                    )
+                    self.telemetry.record(
+                        "onebridge.adapter.duration_seconds",
+                        time.monotonic() - adapter_started,
+                        adapter_attributes,
+                    )
 
                 for required_kind in missing_for_adapter:
                     report = validate_adapter_outputs(
