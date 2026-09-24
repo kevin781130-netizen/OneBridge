@@ -101,6 +101,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     deployments = DeploymentSwitchService(
         service.db,
         actuator=openclaw_actuator,
+        health_max_age_seconds=settings.openclaw_health_max_age_seconds,
     )
     task_scheduler = None
     if settings.task_queue_url:
