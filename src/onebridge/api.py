@@ -4,9 +4,12 @@ from fastapi import FastAPI, HTTPException
 
 from .adapters.mock import default_mock_registry
 from .artifacts import LocalObjectStore, S3ObjectStore
+from .audit import HashChainAuditLog
+from .checkpoints import CheckpointStore
 from .config import Settings
 from .contracts import ApprovalRequest, TaskContract
 from .db import Database
+from .durable_service import DurableOneBridgeService
 from .service import OneBridgeService
 
 
@@ -24,7 +27,14 @@ def build_service(settings: Settings | None = None) -> OneBridgeService:
         )
     else:
         store = LocalObjectStore(settings.storage_root)
-    return OneBridgeService(db, default_mock_registry(), store)
+
+    return DurableOneBridgeService(
+        db,
+        default_mock_registry(),
+        store,
+        audit=HashChainAuditLog(settings.audit_log),
+        checkpoints=CheckpointStore(settings.checkpoint_root),
+    )
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -34,6 +44,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/health")
     def health() -> dict:
         return {"ok": True, "version": "0.1.0", "adapters": service.registry.names()}
+
+    @app.get("/api/v1/audit/verify")
+    def verify_audit() -> dict:
+        audit = getattr(service, "audit", None)
+        if audit is None:
+            return {"valid": True, "events": 0, "disabled": True}
+        return audit.verify()
 
     @app.post("/api/v1/tasks")
     def submit(contract: TaskContract) -> dict:
