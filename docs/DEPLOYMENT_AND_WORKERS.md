@@ -107,10 +107,22 @@ Probe it:
 POST /api/v1/deployments/openclaw/blue/probe
 ```
 
-Promote only after healthy evidence:
+Promote only after current healthy evidence:
 
 ```text
 POST /api/v1/deployments/openclaw/blue/promote
+```
+
+Health evidence expires by default after five minutes. Override the window with:
+
+```bash
+export ONEBRIDGE_OPENCLAW_HEALTH_MAX_AGE_SECONDS=300
+```
+
+The currently active slot is available at:
+
+```text
+GET /api/v1/deployments/openclaw/active
 ```
 
 After the opposite slot has also been qualified and promoted, rollback is:
