@@ -346,7 +346,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         return DeploymentSwitchService.as_dict(status)
 
-    @app.post("/api/v1/deployments/openclaw/rollback")
+    @app.post("/api/v1/deployments/openclaw/actions/rollback")
     def rollback_openclaw_deployment(
         auth: AuthContext | None = Depends(current_auth),
     ) -> dict:
