@@ -22,6 +22,22 @@ def _env_csv(name: str) -> tuple[str, ...]:
     )
 
 
+def _env_json_object(name: str) -> dict[str, str]:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return {}
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{name} must be a JSON string object") from exc
+    if not isinstance(value, dict) or not all(
+        isinstance(key, str) and isinstance(item, str)
+        for key, item in value.items()
+    ):
+        raise ValueError(f"{name} must be a JSON string object")
+    return {str(key): str(item) for key, item in value.items()}
+
+
 def _env_json_list(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
     raw = os.getenv(name)
     if raw is None or not raw.strip():
@@ -97,6 +113,9 @@ class Settings:
     ) or ("content", "design", "code", "test_report")
     adapter_plugins: tuple[str, ...] = _env_csv(
         "ONEBRIDGE_ADAPTER_PLUGINS"
+    )
+    output_routes: dict[str, str] = _env_json_object(
+        "ONEBRIDGE_OUTPUT_ROUTES_JSON"
     )
 
     s3_bucket: str = os.getenv("ONEBRIDGE_S3_BUCKET", "onebridge")
