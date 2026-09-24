@@ -97,6 +97,10 @@ class Settings:
     ) or ("content", "design", "code", "test_report")
     line_auto_run: bool = _env_bool("ONEBRIDGE_LINE_AUTO_RUN", False)
 
+    adapter_plugins: tuple[str, ...] = _env_csv(
+        "ONEBRIDGE_ADAPTER_PLUGINS"
+    )
+
     s3_bucket: str = os.getenv("ONEBRIDGE_S3_BUCKET", "onebridge")
     s3_endpoint: str | None = os.getenv("ONEBRIDGE_S3_ENDPOINT")
     s3_region: str | None = os.getenv("ONEBRIDGE_S3_REGION")
