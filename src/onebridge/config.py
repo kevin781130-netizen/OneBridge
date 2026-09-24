@@ -45,6 +45,10 @@ class Settings:
     audit_log: Path = Path(os.getenv("ONEBRIDGE_AUDIT_LOG", ".onebridge/audit.jsonl"))
     identity_db: Path = Path(os.getenv("ONEBRIDGE_IDENTITY_DB", ".onebridge/identity.db"))
     require_api_key: bool = _env_bool("ONEBRIDGE_REQUIRE_API_KEY", False)
+    require_qualified_adapters: bool = _env_bool(
+        "ONEBRIDGE_REQUIRE_QUALIFIED_ADAPTERS",
+        False,
+    )
 
     flowise_base_url: str | None = os.getenv("ONEBRIDGE_FLOWISE_BASE_URL")
     flowise_chatflow_id: str | None = os.getenv("ONEBRIDGE_FLOWISE_CHATFLOW_ID")
