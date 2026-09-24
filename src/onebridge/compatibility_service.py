@@ -152,6 +152,78 @@ class CompatibilityService:
 
         return self.get(adapter_id, version)
 
+    def promote_many(
+        self,
+        targets: list[tuple[str, str]],
+    ) -> list[CompatibilityStatus]:
+        normalized = list(dict.fromkeys(
+            (str(adapter_id), str(version))
+            for adapter_id, version in targets
+        ))
+        if not normalized:
+            return []
+
+        with self.db.Session() as session:
+            candidates: dict[tuple[str, str], CompatibilityRecord] = {}
+            for adapter_id, version in normalized:
+                candidate = session.scalar(
+                    select(CompatibilityRecord).where(
+                        CompatibilityRecord.adapter_id == adapter_id,
+                        CompatibilityRecord.version == version,
+                    )
+                )
+                if candidate is None:
+                    raise KeyError((adapter_id, version))
+                if candidate.state not in {
+                    "candidate",
+                    "blocked",
+                    "active",
+                }:
+                    raise ValueError(
+                        f"{adapter_id}@{version}:invalid promotion state"
+                    )
+                qualification = self._latest_qualification(
+                    session,
+                    adapter_id,
+                    version,
+                )
+                if qualification is None:
+                    raise ValueError(
+                        f"{adapter_id}@{version}:promotion requires qualification evidence"
+                    )
+                if not bool(qualification.passed):
+                    raise ValueError(
+                        f"{adapter_id}@{version}:latest qualification did not pass"
+                    )
+                candidates[(adapter_id, version)] = candidate
+
+            for adapter_id, version in normalized:
+                active_rows = list(
+                    session.scalars(
+                        select(CompatibilityRecord).where(
+                            CompatibilityRecord.adapter_id == adapter_id,
+                            CompatibilityRecord.state == "active",
+                        )
+                    )
+                )
+                for row in active_rows:
+                    if row.version != version:
+                        row.state = "candidate"
+                        row.notes = "previous active version"
+
+                candidate = candidates[(adapter_id, version)]
+                candidate.state = "active"
+                candidate.notes = (
+                    candidate.notes
+                    or "qualified active version"
+                )
+            session.commit()
+
+        return [
+            self.get(adapter_id, version)
+            for adapter_id, version in normalized
+        ]
+
     def block(
         self,
         adapter_id: str,
