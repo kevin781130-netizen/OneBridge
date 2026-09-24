@@ -1,0 +1,67 @@
+name: Security and Supply Chain
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  python-security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Build product environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m venv .product-env
+          .product-env/bin/python -m pip install --upgrade pip
+          .product-env/bin/python -m pip install .
+
+      - name: Install security tools
+        run: |
+          python -m pip install             bandit==1.8.6             cyclonedx-bom==7.1.0             ruff==0.12.9
+
+      - name: Fatal static checks
+        run: python -m ruff check --select E9,F63,F7,F82 src tests
+
+      - name: High-severity Python SAST
+        run: python -m bandit -r src/onebridge -lll
+
+      - name: Generate CycloneDX SBOM
+        run: |
+          cyclonedx-py environment .product-env/bin/python             --pyproject pyproject.toml             --output-format JSON             --output-reproducible             --output-file onebridge-sbom.cdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: onebridge-sbom-${{ github.sha }}
+          path: onebridge-sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 30
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan repository history for secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
