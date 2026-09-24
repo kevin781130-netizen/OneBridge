@@ -8,7 +8,7 @@ from .audit import HashChainAuditLog
 from .auth import AuthContext, AuthenticationError, authenticate_bearer, require_tenant
 from .checkpoints import CheckpointStore
 from .config import Settings
-from .contracts import ApprovalRequest, TaskContract
+from .contracts import ApprovalRequest, TaskContract, TextArtifactRevisionRequest
 from .db import Database, ProjectRecord, TaskRecord
 from .durable_service import DurableOneBridgeService
 from .identity import IdentityStore
@@ -148,6 +148,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="task not found") from exc
         except (ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/v1/tasks/{task_id}/artifacts/{artifact_id}/revisions")
+    def revise_artifact(
+        task_id: str,
+        artifact_id: str,
+        request: TextArtifactRevisionRequest,
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> dict:
+        enforce_task_scope(task_id, auth)
+        try:
+            revised = service.revise_text_artifact(
+                task_id,
+                artifact_id,
+                request,
+            )
+            return revised.model_dump()
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="artifact not found") from exc
+        except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.post("/api/v1/tasks/{task_id}/approve")
