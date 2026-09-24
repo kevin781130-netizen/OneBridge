@@ -49,7 +49,10 @@ class Entry:
 
 class Entries(list):
     def select(self, **kwargs):
-        assert kwargs["group"] == "onebridge.adapters"
+        assert kwargs["group"] in {
+            "onebridge.adapters",
+            "onebridge.context_providers",
+        }
         return self
 
 
