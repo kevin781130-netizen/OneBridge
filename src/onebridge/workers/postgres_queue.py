@@ -107,6 +107,39 @@ class PostgresWorkerQueue:
             connection.commit()
         return self.get(job_id)
 
+    def enqueue_idempotent(
+        self,
+        *,
+        task_id: str,
+        adapter: str,
+        payload: dict[str, Any],
+        job_id: str,
+    ) -> tuple[QueueJob, bool]:
+        now = time.time()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO onebridge_worker_jobs(
+                        id, task_id, adapter, status, payload_json,
+                        created_at, updated_at
+                    ) VALUES(%s,%s,%s,%s,%s::jsonb,%s,%s)
+                    ON CONFLICT (id) DO NOTHING
+                    """,
+                    (
+                        job_id,
+                        task_id,
+                        adapter,
+                        "queued",
+                        json.dumps(payload, ensure_ascii=False),
+                        now,
+                        now,
+                    ),
+                )
+                created = cursor.rowcount == 1
+            connection.commit()
+        return self.get(job_id), created
+
     def get(self, job_id: str) -> QueueJob:
         with self._connect() as connection:
             with connection.cursor() as cursor:
