@@ -15,7 +15,7 @@ from .contextforge import ContextForge
 from .config import Settings
 from .contracts import ApprovalRequest, TaskContract, TextArtifactRevisionRequest
 from .db import Database, ProjectRecord, TaskRecord
-from .deployment_actuator import HttpDeploymentActuator
+from .deployment_actuator import DeploymentActuatorError, HttpDeploymentActuator
 from .deployment_switch import DeploymentProbeError, DeploymentSwitchService
 from .durable_service import DurableOneBridgeService
 from .identity import IdentityStore
@@ -302,6 +302,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 endpoint=str(payload.get("endpoint") or ""),
                 version=str(payload.get("version") or ""),
             )
+        except DeploymentActuatorError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         audit = getattr(service, "audit", None)
@@ -380,6 +382,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict:
         try:
             status = deployments.rollback("openclaw")
+        except DeploymentActuatorError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         audit = getattr(service, "audit", None)
