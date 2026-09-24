@@ -15,6 +15,7 @@ from .contextforge import ContextForge
 from .config import Settings
 from .contracts import ApprovalRequest, TaskContract, TextArtifactRevisionRequest
 from .db import Database, ProjectRecord, TaskRecord
+from .deployment_switch import DeploymentProbeError, DeploymentSwitchService
 from .durable_service import DurableOneBridgeService
 from .identity import IdentityStore
 from .line_messaging import LineMessagingClient, LineMessagingError, LineWebhookController
@@ -79,6 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     service = build_service(settings)
     identities = IdentityStore(settings.identity_db)
     compatibility = CompatibilityService(service.db, service.registry)
+    deployments = DeploymentSwitchService(service.db)
     task_scheduler = None
     if settings.task_queue_url:
         task_scheduler = TaskScheduler(
@@ -255,6 +257,119 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 detail="compatibility entry not found",
             ) from exc
         return CompatibilityService.as_dict(status)
+
+    @app.get("/api/v1/deployments/openclaw")
+    def openclaw_deployments(
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> list[dict]:
+        return [
+            DeploymentSwitchService.as_dict(item)
+            for item in deployments.list("openclaw")
+        ]
+
+    @app.post("/api/v1/deployments/openclaw/{slot}")
+    def register_openclaw_deployment(
+        slot: str,
+        payload: dict,
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> dict:
+        try:
+            status = deployments.register(
+                "openclaw",
+                slot,
+                endpoint=str(payload.get("endpoint") or ""),
+                version=str(payload.get("version") or ""),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        audit = getattr(service, "audit", None)
+        if audit is not None:
+            audit.append(
+                "deployment.candidate_registered",
+                actor=(
+                    auth.workspace_id
+                    if auth is not None
+                    else "local-operator"
+                ),
+                payload={
+                    "service": "openclaw",
+                    "slot": status.slot,
+                    "version": status.version,
+                },
+            )
+        return DeploymentSwitchService.as_dict(status)
+
+    @app.post("/api/v1/deployments/openclaw/{slot}/probe")
+    def probe_openclaw_deployment(
+        slot: str,
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> dict:
+        try:
+            status = deployments.probe("openclaw", slot)
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="deployment slot not found",
+            ) from exc
+        except (ValueError, DeploymentProbeError) as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return DeploymentSwitchService.as_dict(status)
+
+    @app.post("/api/v1/deployments/openclaw/{slot}/promote")
+    def promote_openclaw_deployment(
+        slot: str,
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> dict:
+        try:
+            status = deployments.promote("openclaw", slot)
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="deployment slot not found",
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        audit = getattr(service, "audit", None)
+        if audit is not None:
+            audit.append(
+                "deployment.promoted",
+                actor=(
+                    auth.workspace_id
+                    if auth is not None
+                    else "local-operator"
+                ),
+                payload={
+                    "service": "openclaw",
+                    "slot": status.slot,
+                    "version": status.version,
+                },
+            )
+        return DeploymentSwitchService.as_dict(status)
+
+    @app.post("/api/v1/deployments/openclaw/rollback")
+    def rollback_openclaw_deployment(
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> dict:
+        try:
+            status = deployments.rollback("openclaw")
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        audit = getattr(service, "audit", None)
+        if audit is not None:
+            audit.append(
+                "deployment.rolled_back",
+                actor=(
+                    auth.workspace_id
+                    if auth is not None
+                    else "local-operator"
+                ),
+                payload={
+                    "service": "openclaw",
+                    "slot": status.slot,
+                    "version": status.version,
+                },
+            )
+        return DeploymentSwitchService.as_dict(status)
 
     @app.get("/api/v1/audit/verify")
     def verify_audit(auth: AuthContext | None = Depends(current_auth)) -> dict:
