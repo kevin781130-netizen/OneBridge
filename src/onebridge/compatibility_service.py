@@ -206,6 +206,34 @@ class CompatibilityService:
                 ),
             )
 
+    def require_active_registry(self) -> None:
+        errors: list[str] = []
+        for adapter in self.registry.list():
+            if str(adapter.version).startswith("mock-"):
+                errors.append(
+                    f"{adapter.name}:mock_adapter_not_allowed"
+                )
+                continue
+            try:
+                status = self.get(adapter.name, adapter.version)
+            except KeyError:
+                errors.append(
+                    f"{adapter.name}@{adapter.version}:compatibility_entry_missing"
+                )
+                continue
+            if status.state != "active":
+                errors.append(
+                    f"{adapter.name}@{adapter.version}:not_active"
+                )
+            if status.latest_qualification_passed is not True:
+                errors.append(
+                    f"{adapter.name}@{adapter.version}:qualification_missing_or_failed"
+                )
+        if errors:
+            raise RuntimeError(
+                "qualified adapter gate failed: " + ", ".join(errors)
+            )
+
     def list(self) -> list[CompatibilityStatus]:
         with self.db.Session() as session:
             rows = list(
