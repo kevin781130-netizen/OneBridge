@@ -1,0 +1,51 @@
+"""Stable public error codes for OneBridge."""
+
+from __future__ import annotations
+
+import re
+
+
+ONEBRIDGE_CONTRACT_001 = "ONEBRIDGE-CONTRACT-001"
+ONEBRIDGE_ADAPTER_001 = "ONEBRIDGE-ADAPTER-001"
+ONEBRIDGE_ADAPTER_002 = "ONEBRIDGE-ADAPTER-002"
+ONEBRIDGE_ARTIFACT_001 = "ONEBRIDGE-ARTIFACT-001"
+ONEBRIDGE_APPROVAL_001 = "ONEBRIDGE-APPROVAL-001"
+ONEBRIDGE_COMPAT_001 = "ONEBRIDGE-COMPAT-001"
+ONEBRIDGE_WORKER_001 = "ONEBRIDGE-WORKER-001"
+ONEBRIDGE_VERIFY_001 = "ONEBRIDGE-VERIFY-001"
+ONEBRIDGE_REVIEW_001 = "ONEBRIDGE-REVIEW-001"
+
+
+_REASON_PATTERNS: list[tuple[str, str]] = [
+    ("contract", ONEBRIDGE_CONTRACT_001),
+    ("adapter not registered", ONEBRIDGE_ADAPTER_001),
+    ("capability", ONEBRIDGE_ADAPTER_002),
+    ("artifact", ONEBRIDGE_ARTIFACT_001),
+    ("approval", ONEBRIDGE_APPROVAL_001),
+    ("compatibility", ONEBRIDGE_COMPAT_001),
+    ("sandbox", ONEBRIDGE_WORKER_001),
+    ("worker", ONEBRIDGE_WORKER_001),
+    ("verification", ONEBRIDGE_VERIFY_001),
+    ("hash", ONEBRIDGE_VERIFY_001),
+]
+
+
+def reason_to_public_code(reason: str) -> str:
+    text = str(reason or "").lower()
+    for pattern, code in _REASON_PATTERNS:
+        if re.search(pattern, text):
+            return code
+    return ONEBRIDGE_REVIEW_001
+
+
+ALL_CODES = [
+    ONEBRIDGE_CONTRACT_001,
+    ONEBRIDGE_ADAPTER_001,
+    ONEBRIDGE_ADAPTER_002,
+    ONEBRIDGE_ARTIFACT_001,
+    ONEBRIDGE_APPROVAL_001,
+    ONEBRIDGE_COMPAT_001,
+    ONEBRIDGE_WORKER_001,
+    ONEBRIDGE_VERIFY_001,
+    ONEBRIDGE_REVIEW_001,
+]
