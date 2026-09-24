@@ -129,7 +129,67 @@ default-deny egress policy. Probe evidence stores status, latency, content type,
 body SHA-256 and an optional JSON `ok` flag rather than storing the full
 response body.
 
-The registry does not yet change an external load balancer or OpenClaw process
-manager by itself. That final traffic-switch hook should consume the active-slot
-record so the control-plane evidence remains the authority for promotion and
-rollback.
+### Signed traffic actuator
+
+OneBridge can now call a real deployment/traffic controller before it commits the
+slot transition. Configure both values together:
+
+```bash
+export ONEBRIDGE_OPENCLAW_ACTUATOR_URL=https://deploy.example.com/onebridge/switch
+export ONEBRIDGE_OPENCLAW_ACTUATOR_SECRET=<shared-secret>
+```
+
+The actuator receives a bounded JSON request containing an idempotency key,
+service, action, previous slot, target slot, version and target endpoint.
+OneBridge signs the exact request body with HMAC-SHA256 and sends:
+
+```text
+X-OneBridge-Timestamp
+X-OneBridge-Signature: sha256=<hex>
+X-OneBridge-Idempotency-Key
+```
+
+The actuator must return HTTP 2xx. It may also return
+`{"ok":true,"active_slot":"green"}`; if `active_slot` is present it must match
+the requested target slot.
+
+OneBridge records each external switch in `deployment_actions` before the call.
+A successful external actuation becomes `committed` only after the registry
+transition commits. If external actuation succeeds but the local commit fails,
+the journal is marked `reconcile_required` rather than pretending the two
+systems are consistent.
+
+Actuation history is available at:
+
+```text
+GET /api/v1/deployments/openclaw/history
+```
+
+Remote actuator URLs require HTTPS; loopback HTTP is allowed only with an
+explicit port. Redirects are rejected and response bodies are bounded and stored
+only as SHA-256 evidence.
+
+## Adapter release train
+
+The three production adapters can now be qualified as one release set:
+
+```bash
+onebridge release-adapters --adapters flowise,open_design,hermes
+```
+
+The release train performs a preflight that rejects missing or mock adapters,
+runs and stores qualification evidence for the full set, and promotes versions
+only when every requested adapter passes. Promotion of the compatible set is one
+database transaction, so a failing Open Design or Hermes qualification does not
+leave Flowise partially promoted.
+
+To collect evidence without promotion:
+
+```bash
+onebridge release-adapters --adapters flowise,open_design,hermes --qualify-only
+```
+
+This command intentionally bypasses the normal
+`ONEBRIDGE_REQUIRE_QUALIFIED_ADAPTERS` startup gate because its purpose is to
+create the evidence needed to satisfy that gate. Normal API and worker startup
+remain fail-closed when the gate is enabled.
