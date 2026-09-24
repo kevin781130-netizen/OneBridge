@@ -127,6 +127,41 @@ class SQLiteWorkerQueue:
             return None
         return self.get(row["id"])
 
+    def heartbeat(
+        self,
+        job_id: str,
+        *,
+        worker: str,
+    ) -> bool:
+        with self._connect() as conn:
+            changed = conn.execute(
+                """
+                UPDATE worker_jobs
+                SET updated_at=?
+                WHERE id=? AND status='running' AND worker=?
+                """,
+                (time.time(), job_id, worker),
+            ).rowcount
+        return changed == 1
+
+    def requeue_stale(
+        self,
+        *,
+        adapter: str,
+        stale_after_seconds: float,
+    ) -> int:
+        cutoff = time.time() - max(1.0, float(stale_after_seconds))
+        with self._connect() as conn:
+            changed = conn.execute(
+                """
+                UPDATE worker_jobs
+                SET status='queued',worker=NULL,error=NULL,result_json=NULL,updated_at=?
+                WHERE adapter=? AND status='running' AND updated_at<?
+                """,
+                (time.time(), adapter, cutoff),
+            ).rowcount
+        return int(changed)
+
     def finish(self, job_id: str, result: dict[str, Any]) -> QueueJob:
         with self._connect() as conn:
             conn.execute(
