@@ -26,13 +26,14 @@ The repository now contains a runnable foundation with substantial infrastructur
 - FastAPI endpoints for submit/status/artifacts/run/revise/compare/approve/release-gate/release/retry/cancel.
 - CI tests, security/SBOM workflow, and local infrastructure compose for PostgreSQL + MinIO.
 
-Flowise can now switch from the mock to a real Prediction API adapter through environment configuration. Open Design, Hermes, and OpenClaw remain the next real integrations.
+Flowise, Open Design MCP, and Hermes command execution can now switch from mocks to real adapters through environment configuration. OpenClaw already has a stateless OneBridge shim; native OpenClaw tool registration and LINE mapping remain integration work.
 
 See:
 
 - `docs/ARCHITECTURE.md`
 - `docs/EXTRACTION_MAP.md`
 - `docs/MVP_STATUS.md`
+- `docs/REAL_ADAPTERS.md`
 - `docs/PROVENANCE.md`
 
 ## Quick start
@@ -149,3 +150,9 @@ GET  /api/v1/adapters
 ## OpenClaw shim
 
 `OpenClawOneBridgeShim` is intentionally stateless. It exposes the planned OneBridge tool surface—submit, status, artifacts, approve, retry, and cancel—without reading OneBridge's database or invoking workers directly. OpenClaw-native registration remains a thin integration layer on top of this client.
+
+
+## Real Open Design / Hermes / telemetry
+
+See `docs/REAL_ADAPTERS.md` for the MCP result contract, Hermes request/result
+manifest, sandbox behavior, and optional OTLP/HTTP telemetry configuration.
