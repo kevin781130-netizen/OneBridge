@@ -50,6 +50,13 @@ class OneBridgeService:
             session.commit()
         return self.status(contract.task_id)
 
+    def contract(self, task_id: str) -> TaskContract:
+        with self.db.Session() as session:
+            task = session.get(TaskRecord, task_id)
+            if task is None:
+                raise KeyError(task_id)
+            return TaskContract.model_validate_json(task.contract_json)
+
     def status(self, task_id: str) -> dict:
         with self.db.Session() as session:
             task = session.get(TaskRecord, task_id)
