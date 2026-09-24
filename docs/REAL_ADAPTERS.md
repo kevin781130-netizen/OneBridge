@@ -150,3 +150,20 @@ one bounded fixture execution, validates every declared output kind, and prints 
 JSON qualification record containing adapter/version, health latency, observed
 output kinds, duration and validation errors. This is intentionally operator
 initiated because real qualification may call an upstream service or run Hermes.
+
+
+## Compatibility promotion
+
+The compatibility matrix is persisted in the same control-plane database.
+Qualification evidence is stored by adapter id and version. Promotion is
+fail-closed: a candidate cannot become active without a latest passing
+qualification record. Failed qualification marks the candidate blocked.
+
+For strict production startup:
+
+```bash
+export ONEBRIDGE_REQUIRE_QUALIFIED_ADAPTERS=true
+```
+
+Every configured adapter must then be real, active, and backed by passing
+qualification evidence. Mock adapters or unqualified versions prevent startup.
