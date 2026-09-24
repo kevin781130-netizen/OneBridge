@@ -6,6 +6,7 @@ from onebridge.artifacts import LocalObjectStore, S3ObjectStore
 from onebridge.config import Settings
 from onebridge.mcp_http import McpHttpClient
 from onebridge.network_policy import EgressPolicy, EgressRule
+from onebridge.sdk import AdapterPluginContext, load_adapter_plugins
 
 from .base import AdapterRegistry
 from .flowise import FlowisePredictionAdapter
@@ -120,5 +121,17 @@ def build_adapter_registry(
         registry.register(
             MockAdapter("hermes", ["code", "test_report"])
         )
+
+    if settings.adapter_plugins:
+        if store is None:
+            raise ValueError("adapter plugins require an object store")
+        for adapter in load_adapter_plugins(
+            settings.adapter_plugins,
+            context=AdapterPluginContext(
+                store=store,
+                state_root=settings.state_root,
+            ),
+        ):
+            registry.register(adapter)
 
     return registry
