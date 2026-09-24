@@ -176,9 +176,14 @@ class DeploymentSwitchService:
         db: Database,
         *,
         actuator: DeploymentActuatorProtocol | None = None,
+        health_max_age_seconds: float = 300.0,
     ) -> None:
         self.db = db
         self.actuator = actuator
+        self.health_max_age_seconds = max(
+            10.0,
+            float(health_max_age_seconds),
+        )
 
     @staticmethod
     def _slot(value: str) -> str:
@@ -209,6 +214,27 @@ class DeploymentSwitchService:
                 else None
             ),
         )
+
+    def _health_current(
+        self,
+        status: DeploymentStatus,
+    ) -> bool:
+        if status.health_status != "healthy":
+            return False
+        checked_at = status.health_evidence.get("checked_at")
+        if not isinstance(checked_at, str) or not checked_at:
+            return False
+        try:
+            checked = datetime.fromisoformat(checked_at)
+        except ValueError:
+            return False
+        if checked.tzinfo is None:
+            checked = checked.replace(tzinfo=timezone.utc)
+        age = (
+            datetime.now(timezone.utc)
+            - checked.astimezone(timezone.utc)
+        ).total_seconds()
+        return 0 <= age <= self.health_max_age_seconds
 
     def register(
         self,
@@ -348,12 +374,14 @@ class DeploymentSwitchService:
             if row is None:
                 return
             row.status = status
-            row.evidence_json = json.dumps(
-                evidence or {},
-                ensure_ascii=False,
-                sort_keys=True,
-            )
-            row.error = str(error or "")[:2000] or None
+            if evidence is not None:
+                row.evidence_json = json.dumps(
+                    evidence,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            if error is not None:
+                row.error = str(error)[:2000] or None
             session.commit()
 
     def _actuate(
@@ -405,9 +433,9 @@ class DeploymentSwitchService:
     ) -> DeploymentStatus:
         slot_name = self._slot(slot)
         target_status = self.get(service, slot_name)
-        if target_status.health_status != "healthy":
+        if not self._health_current(target_status):
             raise ValueError(
-                "deployment promotion requires healthy probe evidence"
+                "deployment promotion requires current healthy probe evidence"
             )
         if target_status.state == "active":
             return target_status
@@ -441,7 +469,8 @@ class DeploymentSwitchService:
                 )
                 if target is None:
                     raise KeyError((service, slot_name))
-                if target.health_status != "healthy":
+                current_status = self._status(target)
+                if not self._health_current(current_status):
                     raise ValueError(
                         "deployment health changed before promotion commit"
                     )
@@ -496,7 +525,7 @@ class DeploymentSwitchService:
                 )
                 if (
                     item.state == "standby"
-                    and item.health_status == "healthy"
+                    and self._health_current(item)
                 )
             ),
             None,
@@ -533,7 +562,9 @@ class DeploymentSwitchService:
                         DeploymentRecord.health_status == "healthy",
                     )
                 )
-                if standby is None:
+                if standby is None or not self._health_current(
+                    self._status(standby)
+                ):
                     raise ValueError(
                         "healthy standby changed before rollback commit"
                     )
