@@ -74,6 +74,9 @@ class Settings:
     openclaw_actuator_timeout_seconds: float = float(
         os.getenv("ONEBRIDGE_OPENCLAW_ACTUATOR_TIMEOUT_SECONDS", "10")
     )
+    openclaw_health_max_age_seconds: float = float(
+        os.getenv("ONEBRIDGE_OPENCLAW_HEALTH_MAX_AGE_SECONDS", "300")
+    )
     task_queue_url: str | None = os.getenv("ONEBRIDGE_TASK_QUEUE_URL")
     worker_poll_seconds: float = float(
         os.getenv("ONEBRIDGE_WORKER_POLL_SECONDS", "2")
