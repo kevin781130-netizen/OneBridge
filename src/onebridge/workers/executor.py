@@ -69,19 +69,17 @@ class WorkerExecutor:
                 preserve=False,
             )
             with workspace:
-                result = handler(job, workspace)
-                if not isinstance(result, dict):
-                    raise TypeError("worker_handler_result_must_be_object")
-                finished = self.queue.finish(job.id, result)
+                try:
+                    result = handler(job, workspace)
+                    if not isinstance(result, dict):
+                        raise TypeError("worker_handler_result_must_be_object")
+                    finished = self.queue.finish(job.id, result)
+                except Exception:
+                    if self.preserve_failed_workspace:
+                        workspace.preserve = True
+                    raise
             return WorkerExecution(True, job.id, finished.status)
         except Exception as exc:
-            if (
-                workspace is not None
-                and self.preserve_failed_workspace
-                and workspace.root is not None
-                and workspace.root.exists()
-            ):
-                workspace.preserve = True
             safe_error = redact_text(
                 f"{type(exc).__name__}: {exc}"
             )[:8000]
