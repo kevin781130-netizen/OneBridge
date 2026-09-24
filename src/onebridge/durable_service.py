@@ -138,6 +138,20 @@ class DurableOneBridgeService(OneBridgeService):
             )
         return result
 
+    def release(self, task_id: str):
+        released = super().release(task_id)
+        self.audit.append(
+            "task.released",
+            actor="onebridge",
+            task_id=task_id,
+            artifact_id=released.artifact_id,
+            payload={
+                "release_sha256": released.sha256,
+                "input_artifact_ids": released.input_artifacts,
+            },
+        )
+        return released
+
     def retry(self, task_id: str) -> dict:
         result = super().retry(task_id)
         self.audit.append("task.requeued", actor="onebridge", task_id=task_id)
