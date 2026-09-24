@@ -89,6 +89,14 @@ class Settings:
     otel_endpoint: str | None = os.getenv("ONEBRIDGE_OTEL_ENDPOINT")
     otel_headers: str | None = os.getenv("ONEBRIDGE_OTEL_HEADERS")
 
+    line_channel_secret: str | None = os.getenv("ONEBRIDGE_LINE_CHANNEL_SECRET")
+    line_channel_access_token: str | None = os.getenv("ONEBRIDGE_LINE_CHANNEL_ACCESS_TOKEN")
+    line_tenant_id: str | None = os.getenv("ONEBRIDGE_LINE_TENANT_ID")
+    line_required_outputs: tuple[str, ...] = _env_csv(
+        "ONEBRIDGE_LINE_REQUIRED_OUTPUTS"
+    ) or ("content", "design", "code", "test_report")
+    line_auto_run: bool = _env_bool("ONEBRIDGE_LINE_AUTO_RUN", False)
+
     s3_bucket: str = os.getenv("ONEBRIDGE_S3_BUCKET", "onebridge")
     s3_endpoint: str | None = os.getenv("ONEBRIDGE_S3_ENDPOINT")
     s3_region: str | None = os.getenv("ONEBRIDGE_S3_REGION")
