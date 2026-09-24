@@ -75,6 +75,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "auth_required": settings.require_api_key,
         }
 
+    @app.get("/api/v1/adapters")
+    def adapters(auth: AuthContext | None = Depends(current_auth)) -> list[dict]:
+        result = []
+        for adapter in service.registry.list():
+            health = adapter.health()
+            result.append({
+                "name": adapter.name,
+                "version": adapter.version,
+                "capabilities": adapter.capabilities(),
+                "health": {
+                    "status": health.status,
+                    "detail": health.detail,
+                },
+            })
+        return result
+
     @app.get("/api/v1/audit/verify")
     def verify_audit(auth: AuthContext | None = Depends(current_auth)) -> dict:
         audit = getattr(service, "audit", None)
