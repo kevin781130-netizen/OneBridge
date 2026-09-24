@@ -273,6 +273,37 @@ class LineMessagingClient:
         return self.push_text(target, message)
 
 
+class LineTaskProgressNotifier:
+    """Best-effort LINE progress push after a background task settles."""
+
+    def __init__(self, *, service, client: LineMessagingClient) -> None:
+        self.service = service
+        self.client = client
+
+    def __call__(self, task_id: str) -> bool:
+        try:
+            contract = self.service.contract(task_id)
+            if (
+                contract.context.channel != "line"
+                or not contract.context.conversation_id
+            ):
+                return False
+            status = self.service.status(task_id)
+            progress = map_task_progress(
+                status["status"],
+                task_id=task_id,
+                artifact_count=len(self.service.artifacts(task_id)),
+                error=status.get("error"),
+            )
+            self.client.push_progress(
+                contract.context.conversation_id,
+                progress,
+            )
+            return True
+        except (KeyError, LineMessagingError, ValueError, OSError):
+            return False
+
+
 class LineWebhookController:
     """LINE ingress that submits durable OneBridge tasks or answers /status."""
 
