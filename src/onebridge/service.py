@@ -8,7 +8,7 @@ from sqlalchemy import select
 from .adapters.base import AdapterRegistry, AdapterRequest
 from .adapters.validation import validate_adapter_outputs
 from .artifacts import LocalObjectStore, S3ObjectStore
-from .contracts import ApprovalRequest, ArtifactManifest, TaskContract
+from .contracts import ApprovalRequest, ArtifactManifest, TaskContract, TextArtifactRevisionRequest
 from .db import ApprovalRecord, ArtifactRecord, Database, ProjectRecord, TaskRecord
 
 
@@ -180,6 +180,71 @@ class OneBridgeService:
                     session.commit()
             raise
         return self.status(task_id)
+
+    def revise_text_artifact(
+        self,
+        task_id: str,
+        artifact_id: str,
+        request: TextArtifactRevisionRequest,
+    ) -> ArtifactManifest:
+        content = request.content.encode("utf-8")
+        stored = self.store.put_bytes(content, filename=request.filename)
+
+        with self.db.Session() as session:
+            task = session.get(TaskRecord, task_id)
+            if task is None:
+                raise KeyError(task_id)
+
+            parent = session.get(ArtifactRecord, artifact_id)
+            if parent is None or parent.task_id != task_id:
+                raise KeyError(artifact_id)
+
+            latest = session.scalar(
+                select(ArtifactRecord)
+                .where(
+                    ArtifactRecord.task_id == task_id,
+                    ArtifactRecord.kind == parent.kind,
+                )
+                .order_by(ArtifactRecord.revision.desc())
+                .limit(1)
+            )
+            if latest is None or latest.id != parent.id:
+                raise ValueError("artifact revision parent must be the latest revision")
+
+            parent.status = "superseded"
+            record = ArtifactRecord(
+                id=f"art_{uuid4().hex}",
+                project_id=parent.project_id,
+                task_id=parent.task_id,
+                revision=parent.revision + 1,
+                kind=parent.kind,
+                media_type=request.media_type,
+                sha256=stored.sha256,
+                uri=stored.uri,
+                producer_adapter="human_review",
+                producer_version="1",
+                status="awaiting_review",
+                input_artifacts_json=json.dumps([parent.id]),
+            )
+            session.add(record)
+            task.status = "waiting_approval"
+            task.project.status = "waiting_approval"
+            session.commit()
+
+            return ArtifactManifest(
+                artifact_id=record.id,
+                project_id=record.project_id,
+                task_id=record.task_id,
+                revision=record.revision,
+                kind=record.kind,
+                media_type=record.media_type,
+                sha256=record.sha256,
+                uri=record.uri,
+                producer_adapter=record.producer_adapter,
+                producer_version=record.producer_version,
+                status=record.status,
+                input_artifacts=[parent.id],
+            )
 
     def approve(self, task_id: str, request: ApprovalRequest) -> dict:
         with self.db.Session() as session:
