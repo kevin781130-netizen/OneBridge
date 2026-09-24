@@ -15,6 +15,7 @@ from .contextforge import ContextForge
 from .config import Settings
 from .contracts import ApprovalRequest, TaskContract, TextArtifactRevisionRequest
 from .db import Database, ProjectRecord, TaskRecord
+from .deployment_actuator import HttpDeploymentActuator
 from .deployment_switch import DeploymentProbeError, DeploymentSwitchService
 from .durable_service import DurableOneBridgeService
 from .identity import IdentityStore
@@ -80,7 +81,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     service = build_service(settings)
     identities = IdentityStore(settings.identity_db)
     compatibility = CompatibilityService(service.db, service.registry)
-    deployments = DeploymentSwitchService(service.db)
+
+    actuator_values = (
+        settings.openclaw_actuator_url,
+        settings.openclaw_actuator_secret,
+    )
+    if any(actuator_values) and not all(actuator_values):
+        raise ValueError(
+            "OpenClaw actuator requires ONEBRIDGE_OPENCLAW_ACTUATOR_URL "
+            "and ONEBRIDGE_OPENCLAW_ACTUATOR_SECRET"
+        )
+    openclaw_actuator = None
+    if all(actuator_values):
+        openclaw_actuator = HttpDeploymentActuator(
+            url=str(settings.openclaw_actuator_url),
+            shared_secret=str(settings.openclaw_actuator_secret),
+            timeout_seconds=settings.openclaw_actuator_timeout_seconds,
+        )
+    deployments = DeploymentSwitchService(
+        service.db,
+        actuator=openclaw_actuator,
+    )
     task_scheduler = None
     if settings.task_queue_url:
         task_scheduler = TaskScheduler(
@@ -346,6 +367,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 },
             )
         return DeploymentSwitchService.as_dict(status)
+
+    @app.get("/api/v1/deployments/openclaw/history")
+    def openclaw_deployment_history(
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> list[dict]:
+        return deployments.actions("openclaw")
 
     @app.post("/api/v1/deployments/openclaw/actions/rollback")
     def rollback_openclaw_deployment(
