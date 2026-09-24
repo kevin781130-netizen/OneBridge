@@ -12,6 +12,7 @@ from .contracts import ApprovalRequest, TaskContract
 from .db import Database, ProjectRecord, TaskRecord
 from .durable_service import DurableOneBridgeService
 from .identity import IdentityStore
+from .release_gate import evaluate_release_gate
 from .service import OneBridgeService
 
 
@@ -175,6 +176,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="task not found") from exc
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get("/api/v1/tasks/{task_id}/release-gate")
+    def release_gate(
+        task_id: str,
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> dict:
+        enforce_task_scope(task_id, auth)
+        try:
+            status_value = service.status(task_id)
+            decision = evaluate_release_gate(
+                service.contract(task_id),
+                service.artifacts(task_id),
+                task_status=status_value["status"],
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="task not found") from exc
+        return {
+            "allowed": decision.allowed,
+            "reasons": list(decision.reasons),
+            "selected_artifact_ids": list(decision.selected_artifact_ids),
+        }
 
     @app.post("/api/v1/tasks/{task_id}/cancel")
     def cancel(
