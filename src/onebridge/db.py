@@ -102,6 +102,54 @@ class QualificationRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class DeploymentRecord(Base):
+    __tablename__ = "service_deployments"
+    __table_args__ = (
+        UniqueConstraint(
+            "service",
+            "slot",
+            name="uq_service_deployment_slot",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+    )
+    service: Mapped[str] = mapped_column(String(100), index=True)
+    slot: Mapped[str] = mapped_column(String(40))
+    endpoint: Mapped[str] = mapped_column(Text)
+    version: Mapped[str] = mapped_column(String(120))
+    state: Mapped[str] = mapped_column(
+        String(20),
+        default="candidate",
+        index=True,
+    )
+    health_status: Mapped[str] = mapped_column(
+        String(20),
+        default="unknown",
+        index=True,
+    )
+    health_evidence_json: Mapped[str] = mapped_column(
+        Text,
+        default="{}",
+    )
+    promoted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+    )
+
+
 class Database:
     def __init__(self, url: str) -> None:
         connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
