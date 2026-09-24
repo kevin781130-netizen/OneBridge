@@ -4,10 +4,12 @@ import argparse
 import json
 import os
 import socket
+import time
 
 from .api import build_service, create_app
 from .config import Settings
 from .db import Database
+from .line_messaging import LineMessagingClient, LineTaskProgressNotifier
 from .qualification import qualify_adapter
 from .workers.factory import build_worker_queue
 from .workers.task_runner import TaskWorker
@@ -67,8 +69,28 @@ def main(argv: list[str] | None = None) -> int:
             preserve_failed_workspace=settings.worker_preserve_failed_workspace,
             stale_after_seconds=settings.worker_stale_after_seconds,
         )
+        notifier = None
+        if settings.line_channel_access_token:
+            notifier = LineTaskProgressNotifier(
+                service=service,
+                client=LineMessagingClient(
+                    channel_access_token=settings.line_channel_access_token,
+                ),
+            )
+
+        def notify_execution(job_id: str | None) -> None:
+            if notifier is None or not job_id:
+                return
+            try:
+                job = queue.get(job_id)
+            except KeyError:
+                return
+            notifier(job.task_id)
+
         if args.once:
             result = task_worker.run_one()
+            if result.worked:
+                notify_execution(result.job_id)
             print(json.dumps({
                 "worked": result.worked,
                 "job_id": result.job_id,
@@ -76,14 +98,21 @@ def main(argv: list[str] | None = None) -> int:
                 "error": result.error,
             }, indent=2, sort_keys=True))
             return 0 if result.worked and result.status == "succeeded" else 2
-        task_worker.run_forever(
-            poll_seconds=(
+
+        delay = max(
+            0.2,
+            float(
                 args.poll
                 if args.poll is not None
                 else settings.worker_poll_seconds
-            )
+            ),
         )
-        return 0
+        while True:
+            result = task_worker.run_one()
+            if result.worked:
+                notify_execution(result.job_id)
+            else:
+                time.sleep(delay)
 
     if args.command == "qualify":
         service = build_service(Settings())
