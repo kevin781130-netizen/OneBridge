@@ -236,3 +236,28 @@ POST /api/v1/deployments/openclaw/actions/rollback
 ```
 
 See `docs/DEPLOYMENT_AND_WORKERS.md` for the queue and deployment contracts.
+
+
+## Adapter release train
+
+Qualify and promote Flowise, Open Design and Hermes as one release set:
+
+```bash
+onebridge release-adapters --adapters flowise,open_design,hermes
+```
+
+No version is promoted unless every requested real adapter passes qualification.
+Use `--qualify-only` to store evidence without changing active versions.
+
+## Signed OpenClaw deployment actuator
+
+Set `ONEBRIDGE_OPENCLAW_ACTUATOR_URL` and
+`ONEBRIDGE_OPENCLAW_ACTUATOR_SECRET` to turn blue/green promotion into a real
+external traffic-switch request. OneBridge sends an HMAC-SHA256 signed,
+idempotent request before committing the active slot and keeps a deployment
+action journal for failed, actuated, committed, or reconciliation-required
+transitions.
+
+```text
+GET /api/v1/deployments/openclaw/history
+```
