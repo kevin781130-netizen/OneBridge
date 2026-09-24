@@ -65,6 +65,15 @@ class Settings:
         "ONEBRIDGE_REQUIRE_QUALIFIED_ADAPTERS",
         False,
     )
+    openclaw_actuator_url: str | None = os.getenv(
+        "ONEBRIDGE_OPENCLAW_ACTUATOR_URL"
+    )
+    openclaw_actuator_secret: str | None = os.getenv(
+        "ONEBRIDGE_OPENCLAW_ACTUATOR_SECRET"
+    )
+    openclaw_actuator_timeout_seconds: float = float(
+        os.getenv("ONEBRIDGE_OPENCLAW_ACTUATOR_TIMEOUT_SECONDS", "10")
+    )
     task_queue_url: str | None = os.getenv("ONEBRIDGE_TASK_QUEUE_URL")
     worker_poll_seconds: float = float(
         os.getenv("ONEBRIDGE_WORKER_POLL_SECONDS", "2")
