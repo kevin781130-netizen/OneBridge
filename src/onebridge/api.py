@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import asdict
+
 from fastapi import Depends, FastAPI, Header, HTTPException
 
 from .adapters.factory import build_adapter_registry
@@ -13,6 +15,7 @@ from .db import Database, ProjectRecord, TaskRecord
 from .durable_service import DurableOneBridgeService
 from .identity import IdentityStore
 from .release_gate import evaluate_release_gate
+from .review import compare_artifacts
 from .service import OneBridgeService
 
 
@@ -149,6 +152,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="task not found") from exc
         except (ValueError, RuntimeError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get("/api/v1/tasks/{task_id}/artifacts/{left_id}/compare/{right_id}")
+    def compare_artifact_revisions(
+        task_id: str,
+        left_id: str,
+        right_id: str,
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> dict:
+        enforce_task_scope(task_id, auth)
+        values = {
+            item.artifact_id: item
+            for item in service.artifacts(task_id)
+        }
+        left = values.get(left_id)
+        right = values.get(right_id)
+        if left is None or right is None:
+            raise HTTPException(status_code=404, detail="artifact not found")
+        return asdict(compare_artifacts(service.store, left, right))
 
     @app.post("/api/v1/tasks/{task_id}/artifacts/{artifact_id}/revisions")
     def revise_artifact(
