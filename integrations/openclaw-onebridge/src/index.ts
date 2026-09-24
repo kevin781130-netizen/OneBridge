@@ -30,7 +30,12 @@ async function callOneBridge(
   if (init.body !== undefined) headers.set("Content-Type", "application/json");
   if (apiKey) headers.set("Authorization", "Bearer " + apiKey);
 
-  const response = await fetch(url, { ...init, headers, signal, redirect: "error" });
+  const response = await fetch(url, {
+    ...init,
+    headers,
+    signal: signal ?? null,
+    redirect: "error",
+  });
   const text = await response.text();
   let payload: Json = {};
   if (text) {
