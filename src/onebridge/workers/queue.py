@@ -72,6 +72,34 @@ class SQLiteWorkerQueue:
             )
         return self.get(jid)
 
+    def enqueue_idempotent(
+        self,
+        *,
+        task_id: str,
+        adapter: str,
+        payload: dict[str, Any],
+        job_id: str,
+    ) -> tuple[QueueJob, bool]:
+        now = time.time()
+        with self._connect() as conn:
+            changed = conn.execute(
+                """
+                INSERT OR IGNORE INTO worker_jobs(
+                    id,task_id,adapter,status,payload_json,created_at,updated_at
+                ) VALUES(?,?,?,?,?,?,?)
+                """,
+                (
+                    job_id,
+                    task_id,
+                    adapter,
+                    "queued",
+                    json.dumps(payload, ensure_ascii=False),
+                    now,
+                    now,
+                ),
+            ).rowcount
+        return self.get(job_id), changed == 1
+
     def get(self, job_id: str) -> QueueJob:
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM worker_jobs WHERE id=?", (job_id,)).fetchone()
