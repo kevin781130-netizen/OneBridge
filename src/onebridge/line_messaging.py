@@ -284,6 +284,7 @@ class LineWebhookController:
         channel_secret: str,
         tenant_id: str,
         required_outputs: tuple[str, ...],
+        task_scheduler=None,
     ) -> None:
         if not channel_secret:
             raise ValueError("line_channel_secret_required")
@@ -298,6 +299,7 @@ class LineWebhookController:
         self.channel_secret = channel_secret
         self.tenant_id = tenant_id
         self.required_outputs = outputs
+        self.task_scheduler = task_scheduler
 
     def handle(
         self,
@@ -366,6 +368,10 @@ class LineWebhookController:
                 },
             })
             status = self.service.submit(contract)
+            if self.task_scheduler is not None:
+                dispatch = self.task_scheduler.schedule(contract.task_id)
+                status["execution_job_id"] = dispatch.job_id
+                status["execution_status"] = dispatch.status
             self.client.reply_text(
                 event.reply_token,
                 "任務已接收，等待 OneBridge 處理。"
