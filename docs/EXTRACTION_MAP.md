@@ -13,7 +13,7 @@ This repository intentionally reuses patterns already developed in sibling repos
 | Workspace identity | CutPilot | salted API-key digests, revocation, bearer auth and tenant scope | `identity.py`, `auth.py`, `api.py` |
 | Revision/rollback | FlowCraft-AI + CutPilot | snapshots, revision IDs, human text revisions, bounded compare and supersede lineage | `revisions.py`, `review.py`, `service.py` |
 | Adapter capability contract | LyricGuard | explicit provider capabilities and health metadata | `adapters/capabilities.py` |
-| Compatibility / blue-green | OneBridge plan + provider patterns | active/candidate promotion after health validation | `compatibility.py` |
+| Compatibility / blue-green | OneBridge plan + provider patterns | persistent evidence-gated candidate/active promotion and production startup gate | `compatibility.py`, `compatibility_service.py` |
 | Release integrity | SONICRAFT AI Strings + Vera | SHA-256 manifest verification, latest-approved revision gate and fail-closed release artifact | `integrity.py`, `release.py`, `release_gate.py` |
 | Typed workflow validation | MiniMax-H3 / FlowCraft-AI | deterministic validation before execution and adapter output acceptance | `workflow_graph.py`, `adapters/validation.py` |
 | External CLI adapter execution | FlowSonic | bounded subprocess invocation, persisted/redacted logs, version probe | `adapters/process.py` |
@@ -21,6 +21,13 @@ This repository intentionally reuses patterns already developed in sibling repos
 | Network egress | Vera | explicit default-deny host/path/method policy | `network_policy.py`, `endpoint_policy.py` |
 | Supply-chain CI | Vera | SAST, secret scan, reproducible CycloneDX SBOM | `.github/workflows/security-supply-chain.yml` |
 | Flowise integration | OneBridge + official Flowise API | Prediction API adapter with allowlisted overrideConfig and mock fallback | `adapters/flowise.py`, `adapters/factory.py` |
+| OpenClaw ingress shim | OneBridge plan + Vera network boundary | stateless HTTP submit/status/artifacts/approve/retry/cancel with loopback/HTTPS policy | `openclaw_shim.py` |
+
+| Context selection | Vera | explicit scopes, bounded selection, visible fallback/skips | `contextforge.py` |
+| Plugin discovery | LyricGuard provider registry + OneBridge boundary | explicit allowlisted entry-point loading, duplicate rejection, configurable routing | `sdk.py`, `adapters/factory.py` |
+| Review preview | CutPilot artifact handling + OneBridge review boundary | bounded object-store materialization and safe media allowlist | `preview.py`, `review_portal.py` |
+| LINE channel | OneBridge plan + LINE Messaging API contract | raw-body HMAC verification, reply/push transport, task/progress mapping | `line_messaging.py`, `line_progress.py` |
+| OpenClaw native plugin | OneBridge plan + current OpenClaw plugin SDK | tool-only TypeScript package retaining OneBridge as state owner | `integrations/openclaw-onebridge/` |
 
 ## Extraction rules
 
@@ -29,5 +36,3 @@ This repository intentionally reuses patterns already developed in sibling repos
 - Third-party source is not vendored by default.
 - Every extracted pattern is renamed and narrowed to OneBridge's control-plane boundary.
 - Security-sensitive behavior stays fail closed: missing approval, invalid lineage, bad hashes, or unavailable strong sandbox do not silently pass.
-
-| OpenClaw ingress shim | OneBridge plan + Vera network boundary | stateless HTTP submit/status/artifacts/approve/retry/cancel with loopback/HTTPS policy | `openclaw_shim.py` |
