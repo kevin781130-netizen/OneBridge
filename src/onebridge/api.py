@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 
 from .adapters.factory import build_adapter_registry
 from .artifacts import LocalObjectStore, S3ObjectStore
@@ -18,6 +18,7 @@ from .durable_service import DurableOneBridgeService
 from .identity import IdentityStore
 from .line_messaging import LineMessagingClient, LineMessagingError, LineWebhookController
 from .line_progress import map_task_progress
+from .preview import load_artifact_preview
 from .release_gate import evaluate_release_gate
 from .review import compare_artifacts
 from .review_portal import render_review_portal
@@ -311,6 +312,37 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="task not found") from exc
         except (ValueError, RuntimeError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get("/api/v1/tasks/{task_id}/artifacts/{artifact_id}/preview")
+    def artifact_preview(
+        task_id: str,
+        artifact_id: str,
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> Response:
+        enforce_task_scope(task_id, auth)
+        artifact = next(
+            (
+                item
+                for item in service.artifacts(task_id)
+                if item.artifact_id == artifact_id
+            ),
+            None,
+        )
+        if artifact is None:
+            raise HTTPException(status_code=404, detail="artifact not found")
+        try:
+            preview = load_artifact_preview(service.store, artifact)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return Response(
+            content=preview.content,
+            media_type=preview.media_type,
+            headers={
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "Content-Security-Policy": "sandbox; default-src 'none'",
+            },
+        )
 
     @app.get("/api/v1/tasks/{task_id}/artifacts/{artifact_id}/content")
     def artifact_content(
