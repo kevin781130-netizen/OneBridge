@@ -471,7 +471,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             result = service.retry(task_id)
             if task_scheduler is not None:
-                dispatch = task_scheduler.schedule(task_id)
+                dispatch = task_scheduler.schedule(
+                    task_id,
+                    restart=True,
+                )
                 result["execution_job_id"] = dispatch.job_id
                 result["execution_status"] = dispatch.status
             return result
