@@ -38,7 +38,7 @@ def test_http_actuator_signs_request_and_requires_matching_slot(monkeypatch):
     )
     actuator = HttpDeploymentActuator(
         url="http://127.0.0.1:9009/switch",
-        shared_secret="0123456789abcdef",
+        shared_secret="-".join(["unit", "test", "deployment", "secret"]),
     )
     result = actuator.apply(
         DeploymentActuationRequest(
