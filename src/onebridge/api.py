@@ -39,6 +39,10 @@ def build_service(settings: Settings | None = None) -> OneBridgeService:
     else:
         store = LocalObjectStore(settings.storage_root)
 
+    registry = build_adapter_registry(settings, store=store)
+    if settings.require_qualified_adapters:
+        CompatibilityService(db, registry).require_active_registry()
+
     telemetry = build_telemetry(
         service_name=settings.otel_service_name,
         endpoint=settings.otel_endpoint,
@@ -47,7 +51,7 @@ def build_service(settings: Settings | None = None) -> OneBridgeService:
 
     return DurableOneBridgeService(
         db,
-        build_adapter_registry(settings, store=store),
+        registry,
         store,
         audit=HashChainAuditLog(settings.audit_log),
         checkpoints=CheckpointStore(settings.checkpoint_root),
