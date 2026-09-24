@@ -107,6 +107,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             channel_secret=str(settings.line_channel_secret),
             tenant_id=str(settings.line_tenant_id),
             required_outputs=settings.line_required_outputs,
+            task_scheduler=task_scheduler,
         )
 
     app = FastAPI(title="OneBridge Control Plane", version="0.1.0")
