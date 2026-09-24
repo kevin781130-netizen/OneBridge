@@ -133,3 +133,20 @@ OneBridge emits task lifecycle counters, adapter call/failure counters, adapter
 duration histograms, task-run spans, release spans, and adapter execution spans.
 Telemetry attributes intentionally use control-plane identifiers, adapter names,
 versions, status and error type rather than user prompts or artifact contents.
+
+
+## Live qualification
+
+After configuring a real adapter, run the explicit live qualification fixture:
+
+```bash
+onebridge qualify --adapter flowise
+onebridge qualify --adapter open_design
+onebridge qualify --adapter hermes
+```
+
+The command refuses to qualify a mock adapter. It checks adapter health, performs
+one bounded fixture execution, validates every declared output kind, and prints a
+JSON qualification record containing adapter/version, health latency, observed
+output kinds, duration and validation errors. This is intentionally operator
+initiated because real qualification may call an upstream service or run Hermes.
