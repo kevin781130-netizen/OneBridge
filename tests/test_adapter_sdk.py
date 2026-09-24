@@ -8,7 +8,8 @@ from onebridge.adapters.base import (
     AdapterRequest,
     AdapterResult,
 )
-from onebridge.sdk import AdapterPluginContext, load_adapter_plugins
+from onebridge.contextforge import ContextDocument
+from onebridge.sdk import AdapterPluginContext, ContextPluginContext, load_adapter_plugins, load_context_plugins
 
 
 class DemoAdapter:
@@ -80,3 +81,36 @@ def test_missing_configured_plugin_fails_closed(tmp_path: Path, monkeypatch):
                 state_root=tmp_path,
             ),
         )
+
+
+class ContextEntry:
+    name = "context_demo"
+    value = "demo:context_factory"
+
+    def load(self):
+        class Provider:
+            provider_id = "context-demo"
+
+            def fetch(self, scope, contract):
+                return [
+                    ContextDocument(
+                        scope=scope,
+                        source_id="guide",
+                        content="Context text",
+                    )
+                ]
+
+        return lambda context: {"brand": Provider()}
+
+
+def test_explicit_context_plugin_loading(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(
+        "onebridge.sdk.metadata.entry_points",
+        lambda: Entries([ContextEntry()]),
+    )
+    providers = load_context_plugins(
+        ("context_demo",),
+        context=ContextPluginContext(state_root=tmp_path),
+    )
+    assert list(providers) == ["brand"]
+    assert providers["brand"].provider_id == "context-demo"
