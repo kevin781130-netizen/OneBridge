@@ -239,6 +239,23 @@ def run_supervised(
         raw = bytes(retained)
         total = output_total
 
+    if termination_reason is None and total > policy.total_output_bytes:
+        termination_reason = "output_budget_exceeded"
+    if (
+        termination_reason is None
+        and policy.workspace_growth_bytes is not None
+        and growth_bytes is not None
+        and growth_bytes > policy.workspace_growth_bytes
+    ):
+        termination_reason = "workspace_growth_budget_exceeded"
+    if (
+        termination_reason is None
+        and policy.max_new_files is not None
+        and new_files is not None
+        and new_files > policy.max_new_files
+    ):
+        termination_reason = "workspace_file_budget_exceeded"
+
     truncated = total > len(raw)
     output = raw.decode("utf-8", "replace")
     if truncated:
