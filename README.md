@@ -26,7 +26,7 @@ The repository now contains a runnable foundation with substantial infrastructur
 - FastAPI endpoints for submit/status/artifacts/run/revise/compare/approve/release-gate/release/retry/cancel.
 - CI tests, security/SBOM workflow, and local infrastructure compose for PostgreSQL + MinIO.
 
-Flowise, Open Design MCP, and Hermes command execution can now switch from mocks to real adapters through environment configuration. OpenClaw already has a stateless OneBridge shim; native OpenClaw tool registration and LINE mapping remain integration work.
+Flowise, Open Design MCP, and Hermes command execution can switch from mocks to real adapters through environment configuration. The repository also ships a native OpenClaw tool-plugin package, verified LINE webhook/push transport, bounded ContextForge, and explicit adapter/context plugin loading.
 
 See:
 
@@ -34,6 +34,7 @@ See:
 - `docs/EXTRACTION_MAP.md`
 - `docs/MVP_STATUS.md`
 - `docs/REAL_ADAPTERS.md`
+- `docs/CHANNELS_AND_SDK.md`
 - `docs/PROVENANCE.md`
 
 ## Quick start
@@ -166,9 +167,7 @@ Open a task review surface at:
 /review/<task_id>
 ```
 
-The portal uses the same-origin API and keeps any pasted bearer key in page memory
-only. It supports artifact listing, text/HTML/JSON loading, human revisions,
-approve/reject, revision comparison, release-gate checks, and release creation.
+The portal uses the same-origin API and keeps any pasted bearer key in page memory only. It supports artifact listing, text/HTML/JSON loading, bounded PNG/JPEG/WebP/GIF/PDF previews, human revisions, approve/reject, revision comparison, release-gate checks, and release creation.
 
 ## Compatibility qualification and promotion
 
@@ -187,7 +186,18 @@ passing stored qualification.
 
 ## OpenClaw and LINE
 
-`OpenClawToolDispatcher` now publishes the native OneBridge tool schemas for
-submit/status/artifacts/approve/retry/cancel. The `/progress` task endpoint
-returns channel-safe codes/messages that can be forwarded to LINE without
-leaking provider errors or secrets.
+`integrations/openclaw-onebridge` is a native OpenClaw TypeScript tool plugin for submit/status/artifacts/approve/retry/cancel. LINE now has raw-body signature verification, webhook task ingress, reply/push transport, `/status <task_id>`, and channel-safe progress messages without forwarding provider error dumps.
+
+
+## ContextForge and plugin SDK
+
+Tasks can request bounded knowledge through `policy.knowledge_scopes`. Explicitly
+configured context-provider entry points feed ContextForge, which de-duplicates
+content by SHA-256 and enforces visible item/byte budgets before adding a
+`context_bundle` to adapter input.
+
+Python adapter plugins use the `onebridge.adapters` entry-point group and are
+loaded only when listed in `ONEBRIDGE_ADAPTER_PLUGINS`. Context providers use
+`onebridge.context_providers` and `ONEBRIDGE_CONTEXT_PLUGINS`. Existing
+artifact kinds can be routed to custom adapters through
+`ONEBRIDGE_OUTPUT_ROUTES_JSON`.
