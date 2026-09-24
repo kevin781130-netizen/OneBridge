@@ -64,6 +64,8 @@ class CompatibilityService:
 
     def qualify_current(self, adapter_id: str) -> AdapterQualification:
         adapter = self.registry.get(adapter_id)
+        if str(adapter.version).startswith("mock-"):
+            raise ValueError("mock adapters cannot be qualified for promotion")
         self.register_current(adapter_id, state="candidate")
         result = qualify_adapter(adapter)
 
