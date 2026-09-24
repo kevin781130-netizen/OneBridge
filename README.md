@@ -6,19 +6,34 @@ The core intentionally does **not** embed upstream products. OpenClaw, Flowise, 
 
 ## MVP status
 
-The repository now contains the first runnable foundation:
+The repository now contains a runnable foundation with substantial infrastructure extracted and generalized from sibling projects:
 
 - Task Contract v1 with Pydantic validation.
 - Durable SQL task/project/artifact/approval records.
 - Replaceable adapter protocol and mock adapters.
+- Validated adapter registry with duplicate/configuration rejection.
 - Immutable content-addressed local/S3-compatible artifact storage.
+- SQLite durable worker queue with claim/finish/fail/requeue semantics.
+- Strong sandbox boundary for worker execution.
+- Dependency-aware workflow graph and digest-validated checkpoints.
+- Generic revision snapshots and rollback.
+- Compatibility matrix with active/candidate promotion.
+- Tamper-evident hash-chain audit log.
+- Workspace/API-key identity store.
+- Artifact/release SHA-256 integrity verification.
+- Approval-gated release manifest builder.
 - Mock end-to-end workflow: content -> design -> code/test -> review.
-- Human approval gate.
-- Retry and cancel state handling.
 - FastAPI endpoints for submit/status/artifacts/run/approve/retry/cancel.
 - CI tests and a local infrastructure compose file for PostgreSQL + MinIO.
 
-This is the first foundation pass, not the finished 12-week product. Real OpenClaw/Flowise/Open Design/Hermes adapters and compatibility/blue-green automation remain separate milestones.
+The foundation is intentionally separated from real upstream adapters. Real Flowise, Open Design, Hermes, and OpenClaw integrations are the next milestones.
+
+See:
+
+- `docs/ARCHITECTURE.md`
+- `docs/EXTRACTION_MAP.md`
+- `docs/MVP_STATUS.md`
+- `docs/PROVENANCE.md`
 
 ## Quick start
 
@@ -80,4 +95,13 @@ OneBridge owns control-plane truth. Upstream-specific names and payloads stay in
 
 ## Provenance
 
-This foundation deliberately reuses and generalizes patterns already developed in the owner's other repositories, especially Vera (approval/recovery/sandbox boundaries) and CutPilot (queue/object-store/worker patterns). See `docs/PROVENANCE.md`.
+The current foundation deliberately reuses and generalizes patterns from the owner's other repositories:
+
+- Vera: approval, sandbox, recovery/checkpoints, audit boundaries.
+- CutPilot: queue, worker, object-store, workspace identity.
+- FlowCraft-AI: revisions and rollback.
+- LyricGuard: provider capability/registry contracts.
+- MiniMax-H3: deterministic workflow validation patterns.
+- SONICRAFT AI Strings: SHA-256 release integrity and provenance gates.
+
+See `docs/EXTRACTION_MAP.md` for the detailed mapping.
