@@ -69,6 +69,9 @@ class Settings:
     worker_poll_seconds: float = float(
         os.getenv("ONEBRIDGE_WORKER_POLL_SECONDS", "2")
     )
+    worker_stale_after_seconds: float = float(
+        os.getenv("ONEBRIDGE_WORKER_STALE_AFTER_SECONDS", "3600")
+    )
     worker_preserve_failed_workspace: bool = _env_bool(
         "ONEBRIDGE_WORKER_PRESERVE_FAILED_WORKSPACE",
         False,
