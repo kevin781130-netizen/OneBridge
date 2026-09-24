@@ -290,6 +290,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             for item in deployments.list("openclaw")
         ]
 
+    @app.get("/api/v1/deployments/openclaw/active")
+    def active_openclaw_deployment(
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> dict:
+        active = next(
+            (
+                item
+                for item in deployments.list("openclaw")
+                if item.state == "active"
+            ),
+            None,
+        )
+        if active is None:
+            raise HTTPException(
+                status_code=404,
+                detail="no active OpenClaw deployment",
+            )
+        return DeploymentSwitchService.as_dict(active)
+
     @app.post("/api/v1/deployments/openclaw/{slot}")
     def register_openclaw_deployment(
         slot: str,
