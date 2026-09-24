@@ -156,3 +156,38 @@ GET  /api/v1/adapters
 
 See `docs/REAL_ADAPTERS.md` for the MCP result contract, Hermes request/result
 manifest, sandbox behavior, and optional OTLP/HTTP telemetry configuration.
+
+
+## Review Portal
+
+Open a task review surface at:
+
+```text
+/review/<task_id>
+```
+
+The portal uses the same-origin API and keeps any pasted bearer key in page memory
+only. It supports artifact listing, text/HTML/JSON loading, human revisions,
+approve/reject, revision comparison, release-gate checks, and release creation.
+
+## Compatibility qualification and promotion
+
+Configured real adapters can be registered and qualified before activation:
+
+```text
+POST /api/v1/adapters/{adapter_id}/compatibility/candidate
+POST /api/v1/adapters/{adapter_id}/qualify
+POST /api/v1/adapters/{adapter_id}/compatibility/{version}/promote
+GET  /api/v1/compatibility
+```
+
+Set `ONEBRIDGE_REQUIRE_QUALIFIED_ADAPTERS=true` for production startup to fail
+closed unless every configured adapter is non-mock, active, and backed by a
+passing stored qualification.
+
+## OpenClaw and LINE
+
+`OpenClawToolDispatcher` now publishes the native OneBridge tool schemas for
+submit/status/artifacts/approve/retry/cancel. The `/progress` task endpoint
+returns channel-safe codes/messages that can be forwarded to LINE without
+leaking provider errors or secrets.
