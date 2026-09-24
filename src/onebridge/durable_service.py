@@ -61,6 +61,13 @@ class DurableOneBridgeService(OneBridgeService):
 
     def submit(self, contract: TaskContract) -> dict:
         result = super().submit(contract)
+        self.telemetry.count(
+            "onebridge.tasks.submitted",
+            attributes={
+                "onebridge.project_id": contract.project_id,
+                "onebridge.operation": contract.operation,
+            },
+        )
         self.audit.append(
             "task.submitted",
             actor=contract.context.user_id,
@@ -71,16 +78,42 @@ class DurableOneBridgeService(OneBridgeService):
 
     def run(self, task_id: str) -> dict:
         self.audit.append("task.started", actor="onebridge", task_id=task_id)
-        try:
-            result = super().run(task_id)
-        except Exception as exc:
-            self.audit.append(
-                "task.failed",
-                actor="onebridge",
-                task_id=task_id,
-                payload={"error_type": type(exc).__name__},
-            )
-            raise
+        with self.telemetry.span(
+            "onebridge.task.run",
+            {"onebridge.task_id": task_id},
+        ) as span:
+            try:
+                result = super().run(task_id)
+            except Exception as exc:
+                self.audit.append(
+                    "task.failed",
+                    actor="onebridge",
+                    task_id=task_id,
+                    payload={"error_type": type(exc).__name__},
+                )
+                self.telemetry.count(
+                    "onebridge.tasks.failed",
+                    attributes={
+                        "onebridge.task_id": task_id,
+                        "error.type": type(exc).__name__,
+                    },
+                )
+                if span is not None:
+                    span.set_attribute("onebridge.status", "failed")
+                raise
+            else:
+                self.telemetry.count(
+                    "onebridge.tasks.executed",
+                    attributes={
+                        "onebridge.task_id": task_id,
+                        "onebridge.status": result["status"],
+                    },
+                )
+                if span is not None:
+                    span.set_attribute(
+                        "onebridge.status",
+                        str(result["status"]),
+                    )
 
         self._checkpoint_artifacts(task_id)
         artifacts = self.artifacts(task_id)
@@ -112,6 +145,13 @@ class DurableOneBridgeService(OneBridgeService):
         request: TextArtifactRevisionRequest,
     ):
         revised = super().revise_text_artifact(task_id, artifact_id, request)
+        self.telemetry.count(
+            "onebridge.artifacts.revised",
+            attributes={
+                "onebridge.task_id": task_id,
+                "onebridge.artifact_kind": revised.kind,
+            },
+        )
         self.audit.append(
             "artifact.revised",
             actor=request.actor,
@@ -128,6 +168,14 @@ class DurableOneBridgeService(OneBridgeService):
 
     def approve(self, task_id: str, request: ApprovalRequest) -> dict:
         result = super().approve(task_id, request)
+        self.telemetry.count(
+            "onebridge.approvals",
+            amount=len(request.artifact_ids),
+            attributes={
+                "onebridge.task_id": task_id,
+                "onebridge.decision": request.decision,
+            },
+        )
         for artifact_id in request.artifact_ids:
             self.audit.append(
                 f"artifact.{request.decision}",
@@ -139,7 +187,15 @@ class DurableOneBridgeService(OneBridgeService):
         return result
 
     def release(self, task_id: str):
-        released = super().release(task_id)
+        with self.telemetry.span(
+            "onebridge.task.release",
+            {"onebridge.task_id": task_id},
+        ):
+            released = super().release(task_id)
+        self.telemetry.count(
+            "onebridge.releases",
+            attributes={"onebridge.task_id": task_id},
+        )
         self.audit.append(
             "task.released",
             actor="onebridge",
@@ -154,10 +210,18 @@ class DurableOneBridgeService(OneBridgeService):
 
     def retry(self, task_id: str) -> dict:
         result = super().retry(task_id)
+        self.telemetry.count(
+            "onebridge.tasks.retried",
+            attributes={"onebridge.task_id": task_id},
+        )
         self.audit.append("task.requeued", actor="onebridge", task_id=task_id)
         return result
 
     def cancel(self, task_id: str) -> dict:
         result = super().cancel(task_id)
+        self.telemetry.count(
+            "onebridge.tasks.cancelled",
+            attributes={"onebridge.task_id": task_id},
+        )
         self.audit.append("task.cancelled", actor="onebridge", task_id=task_id)
         return result
