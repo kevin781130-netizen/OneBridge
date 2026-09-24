@@ -11,6 +11,7 @@ from .audit import HashChainAuditLog
 from .auth import AuthContext, AuthenticationError, authenticate_bearer, require_tenant
 from .checkpoints import CheckpointStore
 from .compatibility_service import CompatibilityService
+from .contextforge import ContextForge
 from .config import Settings
 from .contracts import ApprovalRequest, TaskContract, TextArtifactRevisionRequest
 from .db import Database, ProjectRecord, TaskRecord
@@ -22,6 +23,7 @@ from .preview import load_artifact_preview
 from .release_gate import evaluate_release_gate
 from .review import compare_artifacts
 from .review_portal import render_review_portal
+from .sdk import ContextPluginContext, load_context_plugins
 from .service import OneBridgeService
 from .telemetry import build_telemetry
 
@@ -45,6 +47,13 @@ def build_service(settings: Settings | None = None) -> OneBridgeService:
     if settings.require_qualified_adapters:
         CompatibilityService(db, registry).require_active_registry()
 
+    context_forge = ContextForge()
+    for scope, provider in load_context_plugins(
+        settings.context_plugins,
+        context=ContextPluginContext(state_root=settings.state_root),
+    ).items():
+        context_forge.register(scope, provider)
+
     telemetry = build_telemetry(
         service_name=settings.otel_service_name,
         endpoint=settings.otel_endpoint,
@@ -58,6 +67,7 @@ def build_service(settings: Settings | None = None) -> OneBridgeService:
         audit=HashChainAuditLog(settings.audit_log),
         checkpoints=CheckpointStore(settings.checkpoint_root),
         telemetry=telemetry,
+        context_forge=context_forge,
         output_routes=settings.output_routes,
     )
 
