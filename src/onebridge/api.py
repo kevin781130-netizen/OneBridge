@@ -15,6 +15,7 @@ from .contracts import ApprovalRequest, TaskContract, TextArtifactRevisionReques
 from .db import Database, ProjectRecord, TaskRecord
 from .durable_service import DurableOneBridgeService
 from .identity import IdentityStore
+from .line_progress import map_task_progress
 from .release_gate import evaluate_release_gate
 from .review import compare_artifacts
 from .service import OneBridgeService
@@ -210,6 +211,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return service.status(task_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="task not found") from exc
+
+    @app.get("/api/v1/tasks/{task_id}/progress")
+    def task_progress(
+        task_id: str,
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> dict:
+        enforce_task_scope(task_id, auth)
+        try:
+            status_value = service.status(task_id)
+            artifact_count = len(service.artifacts(task_id))
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="task not found") from exc
+        return map_task_progress(
+            status_value["status"],
+            task_id=task_id,
+            artifact_count=artifact_count,
+            error=status_value.get("error"),
+        ).to_dict()
 
     @app.get("/api/v1/tasks/{task_id}/artifacts")
     def artifacts(
