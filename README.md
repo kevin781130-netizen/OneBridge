@@ -13,11 +13,11 @@ The repository now contains a runnable foundation with substantial infrastructur
 - Replaceable adapter protocol, mock fallbacks, and a configurable real Flowise Prediction adapter.
 - Validated adapter registry with duplicate/configuration rejection.
 - Immutable content-addressed local/S3-compatible artifact storage.
-- SQLite and PostgreSQL durable worker queues with claim/finish/fail/requeue semantics.
+- SQLite and PostgreSQL durable worker queues with idempotent task dispatch, claim/finish/fail/requeue, stale-claim recovery, and a background task worker.
 - Strong sandbox boundary plus bounded process supervisor and subprocess-adapter primitive.
 - Dependency-aware workflow graph and digest-validated checkpoints.
 - Generic revision snapshots and rollback.
-- Compatibility matrix with active/candidate promotion.
+- Compatibility matrix with active/candidate promotion plus persistent OpenClaw blue/green deployment slots and health-evidence-gated rollback.
 - Tamper-evident, secret-redacted hash-chain audit log.
 - Workspace/API-key identity store with optional bearer authentication and tenant isolation.
 - Artifact/release SHA-256 integrity verification.
@@ -35,6 +35,7 @@ See:
 - `docs/MVP_STATUS.md`
 - `docs/REAL_ADAPTERS.md`
 - `docs/CHANNELS_AND_SDK.md`
+- `docs/DEPLOYMENT_AND_WORKERS.md`
 - `docs/PROVENANCE.md`
 
 ## Quick start
@@ -201,3 +202,37 @@ loaded only when listed in `ONEBRIDGE_ADAPTER_PLUGINS`. Context providers use
 `onebridge.context_providers` and `ONEBRIDGE_CONTEXT_PLUGINS`. Existing
 artifact kinds can be routed to custom adapters through
 `ONEBRIDGE_OUTPUT_ROUTES_JSON`.
+
+
+## Durable background execution
+
+Set `ONEBRIDGE_TASK_QUEUE_URL` and run `onebridge worker` to move task
+execution out of the request path. Submission persists the task first, then
+idempotently creates one durable execution job. In this mode `/run` only
+ensures the task is dispatched; the worker owns execution.
+
+Queue state is visible at:
+
+```text
+GET /api/v1/tasks/{task_id}/execution
+```
+
+The Compose profile now starts both API and worker against PostgreSQL, so
+submitted tasks execute automatically.
+
+## OpenClaw blue-green switching
+
+OneBridge now persists `blue` and `green` OpenClaw deployment slots. A slot
+must have healthy probe evidence before promotion. Promoting one slot atomically
+moves the previous active slot to standby, and rollback requires a healthy
+standby.
+
+```text
+GET  /api/v1/deployments/openclaw
+POST /api/v1/deployments/openclaw/{slot}
+POST /api/v1/deployments/openclaw/{slot}/probe
+POST /api/v1/deployments/openclaw/{slot}/promote
+POST /api/v1/deployments/openclaw/actions/rollback
+```
+
+See `docs/DEPLOYMENT_AND_WORKERS.md` for the queue and deployment contracts.
