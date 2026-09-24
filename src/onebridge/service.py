@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import time
 from dataclasses import asdict
+from pathlib import Path
+from urllib.parse import urlparse
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -277,6 +280,53 @@ class OneBridgeService:
                     session.commit()
             raise
         return self.status(task_id)
+
+    def read_text_artifact(
+        self,
+        task_id: str,
+        artifact_id: str,
+        *,
+        max_bytes: int = 5_000_000,
+    ) -> dict:
+        artifact = next(
+            (
+                item
+                for item in self.artifacts(task_id)
+                if item.artifact_id == artifact_id
+            ),
+            None,
+        )
+        if artifact is None:
+            raise KeyError(artifact_id)
+
+        media_type = artifact.media_type.lower().split(";", 1)[0].strip()
+        if not (
+            media_type.startswith("text/")
+            or media_type in {"application/json", "application/xml"}
+            or media_type.endswith("+json")
+        ):
+            raise ValueError("artifact is not a supported text type")
+
+        with tempfile.TemporaryDirectory(prefix="onebridge-read-") as temp:
+            target = Path(temp) / "artifact"
+            materialized = self.store.get_file(artifact.uri, target)
+            if materialized.stat().st_size > max_bytes:
+                raise ValueError("artifact text content exceeds review limit")
+            try:
+                value = materialized.read_text(encoding="utf-8")
+            except UnicodeDecodeError as exc:
+                raise ValueError("artifact is not valid UTF-8 text") from exc
+
+        filename = Path(urlparse(artifact.uri).path).name or "artifact.txt"
+        return {
+            "artifact_id": artifact.artifact_id,
+            "revision": artifact.revision,
+            "kind": artifact.kind,
+            "media_type": artifact.media_type,
+            "filename": filename,
+            "content": value,
+            "sha256": artifact.sha256,
+        }
 
     def revise_text_artifact(
         self,
