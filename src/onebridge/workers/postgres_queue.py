@@ -187,6 +187,53 @@ class PostgresWorkerQueue:
             connection.commit()
         return self.get(job_id)
 
+    def heartbeat(
+        self,
+        job_id: str,
+        *,
+        worker: str,
+    ) -> bool:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE onebridge_worker_jobs
+                    SET updated_at=%s
+                    WHERE id=%s AND status='running' AND worker=%s
+                    """,
+                    (time.time(), job_id, worker),
+                )
+                changed = cursor.rowcount
+            connection.commit()
+        return changed == 1
+
+    def requeue_stale(
+        self,
+        *,
+        adapter: str,
+        stale_after_seconds: float,
+    ) -> int:
+        cutoff = time.time() - max(1.0, float(stale_after_seconds))
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE onebridge_worker_jobs
+                    SET status='queued',
+                        worker=NULL,
+                        error=NULL,
+                        result_json=NULL,
+                        updated_at=%s
+                    WHERE adapter=%s
+                      AND status='running'
+                      AND updated_at<%s
+                    """,
+                    (time.time(), adapter, cutoff),
+                )
+                changed = cursor.rowcount
+            connection.commit()
+        return int(changed)
+
     def finish(self, job_id: str, result: dict[str, Any]) -> QueueJob:
         with self._connect() as connection:
             with connection.cursor() as cursor:
