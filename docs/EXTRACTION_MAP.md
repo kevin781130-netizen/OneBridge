@@ -8,13 +8,13 @@ This repository intentionally reuses patterns already developed in sibling repos
 | Strong sandbox | Vera | bubblewrap / seatbelt bounded workspace execution | `workers/sandbox.py` |
 | Checkpoint lineage | Vera | digest-bound dependency checkpoint reuse | `checkpoints.py`, `workflow_graph.py` |
 | Audit/recovery | Vera | immutable/digest-validated run evidence + secret redaction | `audit.py`, `redaction.py` |
-| Worker queue | CutPilot | durable SQLite + PostgreSQL SKIP LOCKED claim/finish/fail/requeue | `workers/queue.py`, `workers/postgres_queue.py`, `workers/factory.py` |
+| Worker queue | CutPilot | durable SQLite + PostgreSQL SKIP LOCKED claim/finish/fail/requeue, disposable job workspaces and generic execution loop | `workers/queue.py`, `workers/postgres_queue.py`, `workers/factory.py`, `workers/workspace.py`, `workers/executor.py` |
 | Object storage | CutPilot | local + S3/MinIO abstraction | `artifacts.py` |
 | Workspace identity | CutPilot | salted API-key digests, revocation, bearer auth and tenant scope | `identity.py`, `auth.py`, `api.py` |
-| Revision/rollback | FlowCraft-AI | snapshots, revision IDs, rollback | `revisions.py` |
+| Revision/rollback | FlowCraft-AI + CutPilot | snapshots, revision IDs, human text revisions, bounded compare and supersede lineage | `revisions.py`, `review.py`, `service.py` |
 | Adapter capability contract | LyricGuard | explicit provider capabilities and health metadata | `adapters/capabilities.py` |
 | Compatibility / blue-green | OneBridge plan + provider patterns | active/candidate promotion after health validation | `compatibility.py` |
-| Release integrity | SONICRAFT AI Strings | SHA-256 manifest verification and fail-closed release evidence | `integrity.py`, `release.py` |
+| Release integrity | SONICRAFT AI Strings + Vera | SHA-256 manifest verification, latest-approved revision gate and fail-closed release artifact | `integrity.py`, `release.py`, `release_gate.py` |
 | Typed workflow validation | MiniMax-H3 / FlowCraft-AI | deterministic validation before execution and adapter output acceptance | `workflow_graph.py`, `adapters/validation.py` |
 | External CLI adapter execution | FlowSonic | bounded subprocess invocation, persisted/redacted logs, version probe | `adapters/process.py` |
 | Process supervision | Vera | timeout/output/workspace budgets and process-tree cleanup | `workers/supervisor.py` |
@@ -29,3 +29,5 @@ This repository intentionally reuses patterns already developed in sibling repos
 - Third-party source is not vendored by default.
 - Every extracted pattern is renamed and narrowed to OneBridge's control-plane boundary.
 - Security-sensitive behavior stays fail closed: missing approval, invalid lineage, bad hashes, or unavailable strong sandbox do not silently pass.
+
+| OpenClaw ingress shim | OneBridge plan + Vera network boundary | stateless HTTP submit/status/artifacts/approve/retry/cancel with loopback/HTTPS policy | `openclaw_shim.py` |
