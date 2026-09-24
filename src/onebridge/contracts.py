@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -75,3 +76,29 @@ class ApprovalRequest(BaseModel):
     decision: Literal["approve", "reject"]
     reason: str = Field(default="", max_length=4000)
     actor: str = Field(min_length=1, max_length=200)
+
+
+class TextArtifactRevisionRequest(BaseModel):
+    content: str = Field(max_length=5_000_000)
+    filename: str = Field(min_length=1, max_length=255)
+    media_type: str = Field(min_length=3, max_length=200)
+    actor: str = Field(min_length=1, max_length=200)
+    reason: str = Field(default="", max_length=4000)
+
+    @field_validator("filename")
+    @classmethod
+    def safe_filename(cls, value: str) -> str:
+        if Path(value).name != value or value in {".", ".."}:
+            raise ValueError("filename must be a single safe path segment")
+        return value
+
+    @field_validator("media_type")
+    @classmethod
+    def text_media_type(cls, value: str) -> str:
+        lowered = value.lower()
+        if not (
+            lowered.startswith("text/")
+            or lowered in {"application/json", "application/xml"}
+        ):
+            raise ValueError("human text revisions require a text or structured-text media type")
+        return value
