@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -10,6 +11,8 @@ from .adapters.validation import validate_adapter_outputs
 from .artifacts import LocalObjectStore, S3ObjectStore
 from .contracts import ApprovalRequest, ArtifactManifest, TaskContract, TextArtifactRevisionRequest
 from .db import ApprovalRecord, ArtifactRecord, Database, ProjectRecord, TaskRecord
+from .release import build_release_manifest
+from .release_gate import evaluate_release_gate
 
 
 OUTPUT_ADAPTER = {
@@ -278,6 +281,92 @@ class OneBridgeService:
                     task.project.status = "approved"
             session.commit()
         return self.status(task_id)
+
+    def release(self, task_id: str) -> ArtifactManifest:
+        contract = self.contract(task_id)
+        status_value = self.status(task_id)
+        artifacts = self.artifacts(task_id)
+        decision = evaluate_release_gate(
+            contract,
+            artifacts,
+            task_status=status_value["status"],
+        )
+        if not decision.allowed:
+            raise ValueError(
+                "release_gate_blocked:" + ",".join(decision.reasons)
+            )
+
+        selected_ids = set(decision.selected_artifact_ids)
+        selected = [
+            artifact
+            for artifact in artifacts
+            if artifact.artifact_id in selected_ids
+        ]
+        manifest = build_release_manifest(selected)
+        content = (
+            json.dumps(
+                asdict(manifest),
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("utf-8")
+        stored = self.store.put_bytes(
+            content,
+            filename="release_manifest.json",
+        )
+
+        with self.db.Session() as session:
+            task = session.get(TaskRecord, task_id)
+            if task is None:
+                raise KeyError(task_id)
+            revision = 1 + (
+                session.scalar(
+                    select(ArtifactRecord.revision)
+                    .where(
+                        ArtifactRecord.task_id == task_id,
+                        ArtifactRecord.kind == "release",
+                    )
+                    .order_by(ArtifactRecord.revision.desc())
+                    .limit(1)
+                )
+                or 0
+            )
+            record = ArtifactRecord(
+                id=f"art_{uuid4().hex}",
+                project_id=task.project_id,
+                task_id=task_id,
+                revision=revision,
+                kind="release",
+                media_type="application/json",
+                sha256=stored.sha256,
+                uri=stored.uri,
+                producer_adapter="onebridge",
+                producer_version="0.1.0",
+                status="released",
+                input_artifacts_json=json.dumps(
+                    list(decision.selected_artifact_ids)
+                ),
+            )
+            session.add(record)
+            task.project.status = "released"
+            session.commit()
+
+            return ArtifactManifest(
+                artifact_id=record.id,
+                project_id=record.project_id,
+                task_id=record.task_id,
+                revision=record.revision,
+                kind="release",
+                media_type=record.media_type,
+                sha256=record.sha256,
+                uri=record.uri,
+                producer_adapter=record.producer_adapter,
+                producer_version=record.producer_version,
+                status="released",
+                input_artifacts=list(decision.selected_artifact_ids),
+            )
 
     def retry(self, task_id: str) -> dict:
         with self.db.Session() as session:
