@@ -8,11 +8,13 @@ import urllib.parse
 import urllib.request
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from typing import Any, Mapping
+from typing import Any, Protocol
+from uuid import uuid4
 
 from sqlalchemy import select
 
-from .db import Database, DeploymentRecord, utcnow
+from .db import Database, DeploymentActionRecord, DeploymentRecord, utcnow
+from .deployment_actuator import DeploymentActuationRequest, DeploymentActuationResult
 from .endpoint_policy import validate_loopback_http_endpoint
 from .network_policy import EgressPolicy, EgressRule
 
@@ -47,6 +49,13 @@ class ProbeResult:
 
 class DeploymentProbeError(RuntimeError):
     pass
+
+
+class DeploymentActuatorProtocol(Protocol):
+    def apply(
+        self,
+        request_value: DeploymentActuationRequest,
+    ) -> DeploymentActuationResult: ...
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -162,8 +171,14 @@ def probe_deployment(
 class DeploymentSwitchService:
     """Persistent evidence-gated blue/green deployment registry."""
 
-    def __init__(self, db: Database) -> None:
+    def __init__(
+        self,
+        db: Database,
+        *,
+        actuator: DeploymentActuatorProtocol | None = None,
+    ) -> None:
         self.db = db
+        self.actuator = actuator
 
     @staticmethod
     def _slot(value: str) -> str:
@@ -295,72 +310,294 @@ class DeploymentSwitchService:
         )
         return self.record_health(service, slot, result)
 
+    def _record_action_pending(
+        self,
+        *,
+        service: str,
+        action: str,
+        from_slot: str | None,
+        target: DeploymentStatus,
+    ) -> str:
+        action_id = f"depact_{uuid4().hex}"
+        with self.db.Session() as session:
+            session.add(
+                DeploymentActionRecord(
+                    id=action_id,
+                    service=service,
+                    action=action,
+                    from_slot=from_slot,
+                    to_slot=target.slot,
+                    version=target.version,
+                    status="pending",
+                    evidence_json="{}",
+                )
+            )
+            session.commit()
+        return action_id
+
+    def _record_action_result(
+        self,
+        action_id: str,
+        *,
+        status: str,
+        evidence: dict[str, Any] | None = None,
+        error: str | None = None,
+    ) -> None:
+        with self.db.Session() as session:
+            row = session.get(DeploymentActionRecord, action_id)
+            if row is None:
+                return
+            row.status = status
+            row.evidence_json = json.dumps(
+                evidence or {},
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+            row.error = str(error or "")[:2000] or None
+            session.commit()
+
+    def _actuate(
+        self,
+        *,
+        service: str,
+        action: str,
+        from_slot: str | None,
+        target: DeploymentStatus,
+    ) -> str | None:
+        if self.actuator is None:
+            return None
+        action_id = self._record_action_pending(
+            service=service,
+            action=action,
+            from_slot=from_slot,
+            target=target,
+        )
+        try:
+            result = self.actuator.apply(
+                DeploymentActuationRequest(
+                    request_id=action_id,
+                    service=service,
+                    action=action,
+                    from_slot=from_slot,
+                    to_slot=target.slot,
+                    version=target.version,
+                    target_endpoint=target.endpoint,
+                )
+            )
+        except Exception as exc:
+            self._record_action_result(
+                action_id,
+                status="failed",
+                error=f"{type(exc).__name__}:{str(exc)[:1000]}",
+            )
+            raise
+        self._record_action_result(
+            action_id,
+            status="actuated",
+            evidence=result.to_dict(),
+        )
+        return action_id
+
     def promote(
         self,
         service: str,
         slot: str,
     ) -> DeploymentStatus:
         slot_name = self._slot(slot)
-        with self.db.Session() as session:
-            target = session.scalar(
-                select(DeploymentRecord).where(
-                    DeploymentRecord.service == service,
-                    DeploymentRecord.slot == slot_name,
-                )
+        target_status = self.get(service, slot_name)
+        if target_status.health_status != "healthy":
+            raise ValueError(
+                "deployment promotion requires healthy probe evidence"
             )
-            if target is None:
-                raise KeyError((service, slot_name))
-            if target.health_status != "healthy":
-                raise ValueError(
-                    "deployment promotion requires healthy probe evidence"
-                )
-            if target.state == "active":
-                return self._status(target)
+        if target_status.state == "active":
+            return target_status
 
-            active = list(
-                session.scalars(
+        active_status = next(
+            (
+                item
+                for item in self.list(service)
+                if item.state == "active"
+            ),
+            None,
+        )
+        action_id = self._actuate(
+            service=service,
+            action="promote",
+            from_slot=(
+                active_status.slot
+                if active_status is not None
+                else None
+            ),
+            target=target_status,
+        )
+
+        try:
+            with self.db.Session() as session:
+                target = session.scalar(
+                    select(DeploymentRecord).where(
+                        DeploymentRecord.service == service,
+                        DeploymentRecord.slot == slot_name,
+                    )
+                )
+                if target is None:
+                    raise KeyError((service, slot_name))
+                if target.health_status != "healthy":
+                    raise ValueError(
+                        "deployment health changed before promotion commit"
+                    )
+
+                active = list(
+                    session.scalars(
+                        select(DeploymentRecord).where(
+                            DeploymentRecord.service == service,
+                            DeploymentRecord.state == "active",
+                        )
+                    )
+                )
+                for row in active:
+                    if row.slot != slot_name:
+                        row.state = "standby"
+
+                target.state = "active"
+                target.promoted_at = utcnow()
+                session.commit()
+        except Exception:
+            if action_id is not None:
+                self._record_action_result(
+                    action_id,
+                    status="reconcile_required",
+                    error="registry_commit_failed_after_actuation",
+                )
+            raise
+
+        if action_id is not None:
+            current = self.get(service, slot_name)
+            with self.db.Session() as session:
+                row = session.get(DeploymentActionRecord, action_id)
+                if row is not None:
+                    row.status = "committed"
+                    session.commit()
+            return current
+        return self.get(service, slot_name)
+
+    def rollback(self, service: str) -> DeploymentStatus:
+        values = self.list(service)
+        active_status = next(
+            (item for item in values if item.state == "active"),
+            None,
+        )
+        standby_status = next(
+            (
+                item
+                for item in sorted(
+                    values,
+                    key=lambda value: value.promoted_at or "",
+                    reverse=True,
+                )
+                if (
+                    item.state == "standby"
+                    and item.health_status == "healthy"
+                )
+            ),
+            None,
+        )
+        if standby_status is None:
+            raise ValueError(
+                "no healthy standby deployment available"
+            )
+
+        action_id = self._actuate(
+            service=service,
+            action="rollback",
+            from_slot=(
+                active_status.slot
+                if active_status is not None
+                else None
+            ),
+            target=standby_status,
+        )
+
+        try:
+            with self.db.Session() as session:
+                active = session.scalar(
                     select(DeploymentRecord).where(
                         DeploymentRecord.service == service,
                         DeploymentRecord.state == "active",
                     )
                 )
-            )
-            for row in active:
-                row.state = "standby"
+                standby = session.scalar(
+                    select(DeploymentRecord).where(
+                        DeploymentRecord.service == service,
+                        DeploymentRecord.slot == standby_status.slot,
+                        DeploymentRecord.state == "standby",
+                        DeploymentRecord.health_status == "healthy",
+                    )
+                )
+                if standby is None:
+                    raise ValueError(
+                        "healthy standby changed before rollback commit"
+                    )
+                if active is not None:
+                    active.state = "standby"
+                standby.state = "active"
+                standby.promoted_at = utcnow()
+                session.commit()
+        except Exception:
+            if action_id is not None:
+                self._record_action_result(
+                    action_id,
+                    status="reconcile_required",
+                    error="registry_commit_failed_after_actuation",
+                )
+            raise
 
-            target.state = "active"
-            target.promoted_at = utcnow()
-            session.commit()
-            return self._status(target)
+        if action_id is not None:
+            with self.db.Session() as session:
+                row = session.get(DeploymentActionRecord, action_id)
+                if row is not None:
+                    row.status = "committed"
+                    session.commit()
+        return self.get(service, standby_status.slot)
 
-    def rollback(self, service: str) -> DeploymentStatus:
+    def actions(
+        self,
+        service: str,
+        *,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
         with self.db.Session() as session:
-            active = session.scalar(
-                select(DeploymentRecord).where(
-                    DeploymentRecord.service == service,
-                    DeploymentRecord.state == "active",
+            rows = list(
+                session.scalars(
+                    select(DeploymentActionRecord)
+                    .where(DeploymentActionRecord.service == service)
+                    .order_by(DeploymentActionRecord.created_at.desc())
+                    .limit(max(1, min(int(limit), 200)))
                 )
             )
-            standby = session.scalar(
-                select(DeploymentRecord)
-                .where(
-                    DeploymentRecord.service == service,
-                    DeploymentRecord.state == "standby",
-                    DeploymentRecord.health_status == "healthy",
-                )
-                .order_by(DeploymentRecord.updated_at.desc())
-                .limit(1)
-            )
-            if standby is None:
-                raise ValueError(
-                    "no healthy standby deployment available"
-                )
-            if active is not None:
-                active.state = "standby"
-            standby.state = "active"
-            standby.promoted_at = utcnow()
-            session.commit()
-            return self._status(standby)
+            result: list[dict[str, Any]] = []
+            for row in rows:
+                try:
+                    evidence = json.loads(row.evidence_json or "{}")
+                except json.JSONDecodeError:
+                    evidence = {}
+                result.append({
+                    "id": row.id,
+                    "service": row.service,
+                    "action": row.action,
+                    "from_slot": row.from_slot,
+                    "to_slot": row.to_slot,
+                    "version": row.version,
+                    "status": row.status,
+                    "evidence": (
+                        evidence
+                        if isinstance(evidence, dict)
+                        else {}
+                    ),
+                    "error": row.error,
+                    "created_at": row.created_at.isoformat(),
+                    "updated_at": row.updated_at.isoformat(),
+                })
+            return result
 
     def get(
         self,
