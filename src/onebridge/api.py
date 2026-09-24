@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 
-from .adapters.mock import default_mock_registry
+from .adapters.factory import build_adapter_registry
 from .artifacts import LocalObjectStore, S3ObjectStore
 from .audit import HashChainAuditLog
 from .auth import AuthContext, AuthenticationError, authenticate_bearer, require_tenant
@@ -32,7 +32,7 @@ def build_service(settings: Settings | None = None) -> OneBridgeService:
 
     return DurableOneBridgeService(
         db,
-        default_mock_registry(),
+        build_adapter_registry(settings),
         store,
         audit=HashChainAuditLog(settings.audit_log),
         checkpoints=CheckpointStore(settings.checkpoint_root),
