@@ -91,8 +91,14 @@ class TaskWorker:
         worker_id: str | None = None,
         workspace_parent: str | Path | None = None,
         preserve_failed_workspace: bool = False,
+        stale_after_seconds: float = 3600.0,
     ) -> None:
         self.service = service
+        self.queue = queue
+        self.stale_after_seconds = max(
+            60.0,
+            float(stale_after_seconds),
+        )
         self.executor = WorkerExecutor(
             queue,
             adapter=TASK_QUEUE_ADAPTER,
@@ -113,6 +119,12 @@ class TaskWorker:
         }
 
     def run_one(self) -> WorkerExecution:
+        recover = getattr(self.queue, "requeue_stale", None)
+        if callable(recover):
+            recover(
+                adapter=TASK_QUEUE_ADAPTER,
+                stale_after_seconds=self.stale_after_seconds,
+            )
         return self.executor.run_one(self._handle)
 
     def run_forever(self, *, poll_seconds: float = 2.0) -> None:
