@@ -17,6 +17,7 @@ from .identity import IdentityStore
 from .release_gate import evaluate_release_gate
 from .review import compare_artifacts
 from .service import OneBridgeService
+from .telemetry import build_telemetry
 
 
 def build_service(settings: Settings | None = None) -> OneBridgeService:
@@ -34,12 +35,19 @@ def build_service(settings: Settings | None = None) -> OneBridgeService:
     else:
         store = LocalObjectStore(settings.storage_root)
 
+    telemetry = build_telemetry(
+        service_name=settings.otel_service_name,
+        endpoint=settings.otel_endpoint,
+        headers=settings.otel_headers,
+    )
+
     return DurableOneBridgeService(
         db,
         build_adapter_registry(settings, store=store),
         store,
         audit=HashChainAuditLog(settings.audit_log),
         checkpoints=CheckpointStore(settings.checkpoint_root),
+        telemetry=telemetry,
     )
 
 
