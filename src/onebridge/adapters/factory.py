@@ -22,6 +22,7 @@ def _https_policy(
     *,
     rule_id: str,
     methods: tuple[str, ...] = ("POST",),
+    path_prefix: str | None = None,
 ) -> EgressPolicy | None:
     parsed = urllib.parse.urlsplit(url)
     if parsed.scheme != "https":
@@ -32,7 +33,7 @@ def _https_policy(
         EgressRule(
             rule_id=rule_id,
             host=parsed.hostname,
-            path_prefix=parsed.path or "/",
+            path_prefix=path_prefix or parsed.path or "/",
             methods=methods,
         )
     ])
@@ -55,6 +56,13 @@ def build_adapter_registry(
 
     if has_flowise_url and has_flowise_id:
         base_url = str(settings.flowise_base_url)
+        parsed_flowise = urllib.parse.urlsplit(base_url)
+        base_path = parsed_flowise.path.rstrip("/")
+        flowise_path = (
+            base_path
+            if base_path.endswith("/api/v1")
+            else f"{base_path}/api/v1"
+        )
         registry.register(
             FlowisePredictionAdapter(
                 base_url=base_url,
@@ -65,6 +73,7 @@ def build_adapter_registry(
                 egress_policy=_https_policy(
                     base_url,
                     rule_id="flowise-configured",
+                    path_prefix=flowise_path or "/api/v1",
                 ),
             )
         )
