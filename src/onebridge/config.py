@@ -65,6 +65,14 @@ class Settings:
         "ONEBRIDGE_REQUIRE_QUALIFIED_ADAPTERS",
         False,
     )
+    task_queue_url: str | None = os.getenv("ONEBRIDGE_TASK_QUEUE_URL")
+    worker_poll_seconds: float = float(
+        os.getenv("ONEBRIDGE_WORKER_POLL_SECONDS", "2")
+    )
+    worker_preserve_failed_workspace: bool = _env_bool(
+        "ONEBRIDGE_WORKER_PRESERVE_FAILED_WORKSPACE",
+        False,
+    )
 
     flowise_base_url: str | None = os.getenv("ONEBRIDGE_FLOWISE_BASE_URL")
     flowise_chatflow_id: str | None = os.getenv("ONEBRIDGE_FLOWISE_CHATFLOW_ID")
