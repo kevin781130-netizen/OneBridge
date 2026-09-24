@@ -289,11 +289,15 @@ class LineWebhookController:
             raise ValueError("line_channel_secret_required")
         if not tenant_id:
             raise ValueError("line_tenant_id_required")
+        allowed_outputs = {"content", "design", "code", "test_report"}
+        outputs = tuple(dict.fromkeys(str(item) for item in required_outputs))
+        if not outputs or any(item not in allowed_outputs for item in outputs):
+            raise ValueError("line_required_outputs_invalid")
         self.service = service
         self.client = client
         self.channel_secret = channel_secret
         self.tenant_id = tenant_id
-        self.required_outputs = tuple(required_outputs)
+        self.required_outputs = outputs
 
     def handle(
         self,
