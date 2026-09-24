@@ -1,29 +1,31 @@
 # Source provenance
 
-This OneBridge foundation was built by generalizing patterns already present in repositories owned by the same GitHub account.
+This OneBridge foundation was built by extracting and generalizing patterns already present in repositories owned by the same GitHub account.
 
-## Vera-derived patterns
+## Vera extraction
 
-Generalized concepts:
+The OneBridge worker sandbox and approval boundary are derived from the owner's Vera implementation patterns:
 
 - fail-closed human approval before mutation/release authority;
-- checkpoint/resume and immutable recovery thinking;
-- bounded execution and sandbox policy separation;
-- audit evidence kept separate from model output.
+- bounded workspace execution;
+- Linux bubblewrap and macOS seatbelt strong-sandbox strategy;
+- recovery and audit state kept separate from model output.
 
-No upstream third-party project is embedded into OneBridge by this change.
+The code was reduced and renamed for OneBridge rather than importing Vera as a runtime dependency.
 
-## CutPilot-derived patterns
+## CutPilot extraction
 
-Generalized concepts:
+The OneBridge object-store and durable SQLite worker-queue patterns are derived from the owner's CutPilot implementation:
 
-- queue/worker separation;
+- atomic queue claim and explicit worker ownership;
+- retry/requeue state;
 - local versus S3/MinIO object-store abstraction;
 - artifact URI handling;
-- explicit retry/requeue semantics;
 - server API separated from workers.
 
-## FlowCraft-AI / MiniMax-H3-derived patterns
+The implementation is generalized around OneBridge task and adapter identities.
+
+## FlowCraft-AI / MiniMax-H3 patterns
 
 Generalized concepts:
 
