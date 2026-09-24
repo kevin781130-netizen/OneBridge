@@ -13,6 +13,7 @@ from sqlalchemy import select
 from .adapters.base import AdapterRegistry, AdapterRequest
 from .adapters.validation import validate_adapter_outputs
 from .artifacts import LocalObjectStore, S3ObjectStore
+from .contextforge import ContextForge
 from .contracts import ApprovalRequest, ArtifactManifest, TaskContract, TextArtifactRevisionRequest
 from .db import ApprovalRecord, ArtifactRecord, Database, ProjectRecord, TaskRecord
 from .release import build_release_manifest
@@ -36,11 +37,16 @@ class OneBridgeService:
         store: LocalObjectStore | S3ObjectStore,
         *,
         telemetry: Telemetry | None = None,
+        context_forge: ContextForge | None = None,
+        output_routes: dict[str, str] | None = None,
     ) -> None:
         self.db = db
         self.registry = registry
         self.store = store
         self.telemetry = telemetry or Telemetry.disabled()
+        self.context_forge = context_forge or ContextForge()
+        self.output_routes = dict(OUTPUT_ADAPTER)
+        self.output_routes.update(output_routes or {})
 
     def submit(self, contract: TaskContract) -> dict:
         with self.db.Session() as session:
@@ -130,7 +136,7 @@ class OneBridgeService:
                 if kind in completed_kinds:
                     continue
 
-                adapter_name = OUTPUT_ADAPTER.get(kind)
+                adapter_name = self.output_routes.get(kind)
                 if not adapter_name:
                     raise RuntimeError(
                         f"no adapter route for output kind: {kind}"
@@ -142,16 +148,30 @@ class OneBridgeService:
                     for required in contract.input.required_outputs
                     if (
                         required not in completed_kinds
-                        and OUTPUT_ADAPTER.get(required) == adapter_name
+                        and self.output_routes.get(required) == adapter_name
                     )
                 ]
                 lineage = list(produced_ids)
+                adapter_inputs = dict(contract.metadata)
+                if contract.policy.knowledge_scopes:
+                    context_bundle = self.context_forge.assemble(contract)
+                    adapter_inputs["context_bundle"] = (
+                        context_bundle.to_adapter_input()
+                    )
+                    self.telemetry.record(
+                        "onebridge.context.bytes",
+                        context_bundle.used_bytes,
+                        {
+                            "onebridge.task_id": contract.task_id,
+                            "onebridge.context_truncated": context_bundle.truncated,
+                        },
+                    )
                 request = AdapterRequest(
                     task_id=contract.task_id,
                     project_id=contract.project_id,
                     goal=contract.input.goal,
                     operation=contract.operation,
-                    inputs=contract.metadata,
+                    inputs=adapter_inputs,
                     artifact_inputs=[
                         item.model_dump()
                         for item in self.artifacts(task_id)
