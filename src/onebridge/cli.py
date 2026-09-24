@@ -65,6 +65,7 @@ def main(argv: list[str] | None = None) -> int:
             worker_id=args.name,
             workspace_parent=settings.state_root / "task-worker",
             preserve_failed_workspace=settings.worker_preserve_failed_workspace,
+            stale_after_seconds=settings.worker_stale_after_seconds,
         )
         if args.once:
             result = task_worker.run_one()
