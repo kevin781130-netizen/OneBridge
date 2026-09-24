@@ -12,11 +12,11 @@ This file maps the original OneBridge backlog to the current repository.
 | OB-006 Flowise adapter | Implemented foundation | real Prediction API adapter with local/HTTPS policy boundary; mock fallback when unconfigured |
 | OB-007 Flowise structured output | Implemented foundation | deterministic JSON/media/filename/size validation before artifact acceptance |
 | OB-008 Open Design adapter | Pending | mock only |
-| OB-009 Hermes sandbox worker | Partial | strong sandbox + process supervisor + subprocess adapter primitive + SQLite/PostgreSQL worker queues; real Hermes bridge pending |
-| OB-010 OpenClaw shim | Pending | no real OpenClaw bridge yet |
+| OB-009 Hermes sandbox worker | Partial | strong sandbox + process supervisor + disposable per-job workspace + generic worker executor + SQLite/PostgreSQL queues; real Hermes command/API bridge pending |
+| OB-010 OpenClaw shim | Implemented foundation | stateless submit/status/artifacts/approve/retry/cancel HTTP shim; OpenClaw-native tool registration pending |
 | OB-011 LINE progress mapping | Pending | requires OpenClaw/LINE integration |
-| OB-012 Design revision loop | Partial | generic revision/rollback primitive implemented |
-| OB-013 Approval gate | Implemented foundation | approval records + fail-closed approval primitive |
+| OB-012 Design revision loop | Implemented foundation | human text revisions, supersede lineage, bounded revision comparison, approval flow and audit; visual portal UI pending |
+| OB-013 Approval/release gate | Implemented foundation | latest-required-revision approval semantics + fail-closed release evaluation + release manifest artifact |
 | OB-014 Compatibility Matrix | Implemented foundation | active/candidate/blocked version registry |
 | OB-015 OpenTelemetry | Pending | not wired yet |
 | OB-016 Notices/SBOM | Implemented foundation | notices/provenance docs + security workflow + CycloneDX SBOM artifact + secret scan |
