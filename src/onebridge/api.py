@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import HTMLResponse
 
 from .adapters.factory import build_adapter_registry
 from .artifacts import LocalObjectStore, S3ObjectStore
@@ -18,6 +19,7 @@ from .identity import IdentityStore
 from .line_progress import map_task_progress
 from .release_gate import evaluate_release_gate
 from .review import compare_artifacts
+from .review_portal import render_review_portal
 from .service import OneBridgeService
 from .telemetry import build_telemetry
 
@@ -80,6 +82,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             project = session.get(ProjectRecord, task.project_id)
             if project is None or project.tenant_id != auth.workspace_id:
                 raise HTTPException(status_code=404, detail="task not found")
+
+    @app.get("/review/{task_id}", response_class=HTMLResponse)
+    def review_portal(task_id: str) -> HTMLResponse:
+        return HTMLResponse(render_review_portal(task_id))
 
     @app.get("/health")
     def health() -> dict:
@@ -253,6 +259,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="task not found") from exc
         except (ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get("/api/v1/tasks/{task_id}/artifacts/{artifact_id}/content")
+    def artifact_content(
+        task_id: str,
+        artifact_id: str,
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> dict:
+        enforce_task_scope(task_id, auth)
+        try:
+            return service.read_text_artifact(task_id, artifact_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="artifact not found") from exc
+        except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.get("/api/v1/tasks/{task_id}/artifacts/{left_id}/compare/{right_id}")
