@@ -16,8 +16,7 @@ section{border:1px solid #8885;border-radius:12px;padding:14px;margin:14px 0}
 input,select,textarea,button{font:inherit;padding:7px}
 textarea{width:100%;min-height:220px;box-sizing:border-box;font-family:monospace}
 table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #8884;text-align:left}
-pre{white-space:pre-wrap;max-height:420px;overflow:auto}
-</style>
+pre{white-space:pre-wrap;max-height:420px;overflow:auto}\n#preview-image{max-width:100%;max-height:560px;display:none}\n#preview-frame{width:100%;height:560px;border:0;display:none}\n</style>
 </head>
 <body>
 <h1>OneBridge Review Portal</h1>
@@ -36,6 +35,14 @@ pre{white-space:pre-wrap;max-height:420px;overflow:auto}
 <button id="approve">核准選取</button><button id="reject">退回選取</button>
 <input id="reason" placeholder="原因（選填）">
 </div>
+</section>
+
+<section>
+<h2>Preview</h2>
+<div class="row"><select id="preview-artifact"></select><button id="preview">預覽</button></div>
+<img id="preview-image" alt="Artifact preview">
+<iframe id="preview-frame" title="Artifact preview" sandbox></iframe>
+<p id="preview-meta"></p>
 </section>
 
 <section>
@@ -66,6 +73,7 @@ const taskId = __TASK_JSON__;
 document.getElementById("task-id").textContent = taskId;
 const el = id => document.getElementById(id);
 let artifacts = [];
+let previewUrl = null;
 
 function headers(jsonBody=false){
   const h = {};
@@ -97,7 +105,8 @@ function render(){
     rows.appendChild(tr);
   });
   const editable=artifacts.filter(a=>a.media_type.startsWith("text/")||["application/json","application/xml"].includes(a.media_type));
-  fillSelect(el("artifact"),editable); fillSelect(el("left"),artifacts); fillSelect(el("right"),artifacts);
+  const previewable=artifacts.filter(a=>["image/png","image/jpeg","image/webp","image/gif","application/pdf"].includes(a.media_type.split(";")[0].trim().toLowerCase()));
+  fillSelect(el("artifact"),editable); fillSelect(el("preview-artifact"),previewable); fillSelect(el("left"),artifacts); fillSelect(el("right"),artifacts);
   if(el("right").options.length>1) el("right").selectedIndex=el("right").options.length-1;
 }
 async function refresh(){
@@ -121,6 +130,26 @@ async function review(decision){
     await refresh();
   }catch(e){el("error").textContent=String(e);}
 }
+async function previewArtifact(){
+  const id=el("preview-artifact").value;if(!id)return;
+  if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=null;}
+  el("preview-image").style.display="none";
+  el("preview-frame").style.display="none";
+  try{
+    const response=await fetch(taskPath("/artifacts/"+encodeURIComponent(id)+"/preview"),{headers:headers()});
+    if(!response.ok)throw new Error(String(response.status)+" "+response.statusText);
+    const blob=await response.blob();
+    previewUrl=URL.createObjectURL(blob);
+    const type=(blob.type||"").toLowerCase();
+    if(type==="application/pdf"){
+      el("preview-frame").src=previewUrl;el("preview-frame").style.display="block";
+    }else{
+      el("preview-image").src=previewUrl;el("preview-image").style.display="block";
+    }
+    el("preview-meta").textContent=type+" · "+blob.size+" bytes";
+  }catch(e){el("error").textContent=String(e);}
+}
+
 async function loadContent(){
   const id=el("artifact").value;if(!id)return;
   try{
@@ -149,7 +178,7 @@ async function release(){
   try{const v=await api(taskPath("/release"),{method:"POST",headers:headers()});el("release-result").textContent="Released: "+v.artifact_id;await refresh();}catch(e){el("error").textContent=String(e);}
 }
 el("refresh").onclick=refresh;el("approve").onclick=()=>review("approve");el("reject").onclick=()=>review("reject");
-el("load").onclick=loadContent;el("save").onclick=saveRevision;el("compare").onclick=compare;el("gate").onclick=gate;el("release").onclick=release;
+el("preview").onclick=previewArtifact;el("load").onclick=loadContent;el("save").onclick=saveRevision;el("compare").onclick=compare;el("gate").onclick=gate;el("release").onclick=release;
 refresh();
 </script>
 </body>
