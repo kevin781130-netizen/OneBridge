@@ -7,10 +7,12 @@ import socket
 import time
 
 from .api import build_service, create_app
+from .compatibility_service import CompatibilityService
 from .config import Settings
 from .db import Database
 from .line_messaging import LineMessagingClient, LineTaskProgressNotifier
 from .qualification import qualify_adapter
+from .release_pipeline import AdapterReleasePipeline
 from .workers.factory import build_worker_queue
 from .workers.task_runner import TaskWorker
 
@@ -29,6 +31,18 @@ def main(argv: list[str] | None = None) -> int:
     worker.add_argument(
         "--name",
         default=f"{socket.gethostname()}-{os.getpid()}",
+    )
+
+    release_adapters = sub.add_parser("release-adapters")
+    release_adapters.add_argument(
+        "--adapters",
+        default="flowise,open_design,hermes",
+        help="Comma-separated adapter ids to qualify as one release set.",
+    )
+    release_adapters.add_argument(
+        "--qualify-only",
+        action="store_true",
+        help="Store qualification evidence without promoting the release set.",
     )
 
     qualify = sub.add_parser("qualify")
@@ -113,6 +127,52 @@ def main(argv: list[str] | None = None) -> int:
                 notify_execution(result.job_id)
             else:
                 time.sleep(delay)
+
+    if args.command == "release-adapters":
+        settings = Settings()
+        # Release qualification is the operation that establishes the active
+        # evidence, so it must be allowed to start before the strict startup
+        # gate is enabled for normal API/worker processes.
+        settings.require_qualified_adapters = False
+        service = build_service(settings)
+        compatibility = CompatibilityService(
+            service.db,
+            service.registry,
+        )
+        adapter_ids = [
+            item.strip()
+            for item in str(args.adapters).split(",")
+            if item.strip()
+        ]
+        result = AdapterReleasePipeline(compatibility).run(
+            adapter_ids,
+            promote=not args.qualify_only,
+        )
+        audit = getattr(service, "audit", None)
+        if audit is not None:
+            audit.append(
+                "adapter_release.completed",
+                actor="onebridge-cli",
+                payload={
+                    "passed": result.passed,
+                    "promoted": result.promoted,
+                    "adapters": [
+                        {
+                            "adapter_id": item.adapter_id,
+                            "version": item.version,
+                            "qualification_passed": item.qualification_passed,
+                            "promoted": item.promoted,
+                        }
+                        for item in result.items
+                    ],
+                },
+            )
+        print(json.dumps(
+            result.to_dict(),
+            indent=2,
+            sort_keys=True,
+        ))
+        return 0 if result.passed else 4
 
     if args.command == "qualify":
         service = build_service(Settings())
