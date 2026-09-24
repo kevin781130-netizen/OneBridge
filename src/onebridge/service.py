@@ -272,13 +272,28 @@ class OneBridgeService:
                 task.status = "blocked"
                 task.project.status = "waiting_approval"
             else:
-                remaining = session.scalar(select(ArtifactRecord.id).where(
-                    ArtifactRecord.task_id == task_id,
-                    ArtifactRecord.status != "approved",
-                ).limit(1))
-                if remaining is None:
+                session.flush()
+                contract = TaskContract.model_validate_json(task.contract_json)
+                required_approved = True
+                for kind in contract.input.required_outputs:
+                    latest = session.scalar(
+                        select(ArtifactRecord)
+                        .where(
+                            ArtifactRecord.task_id == task_id,
+                            ArtifactRecord.kind == kind,
+                        )
+                        .order_by(ArtifactRecord.revision.desc())
+                        .limit(1)
+                    )
+                    if latest is None or latest.status != "approved":
+                        required_approved = False
+                        break
+                if required_approved:
                     task.status = "succeeded"
                     task.project.status = "approved"
+                else:
+                    task.status = "waiting_approval"
+                    task.project.status = "waiting_approval"
             session.commit()
         return self.status(task_id)
 
