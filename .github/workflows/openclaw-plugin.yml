@@ -1,0 +1,35 @@
+name: OpenClaw Plugin
+
+on:
+  pull_request:
+    paths:
+      - "integrations/openclaw-onebridge/**"
+      - ".github/workflows/openclaw-plugin.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "integrations/openclaw-onebridge/**"
+      - ".github/workflows/openclaw-plugin.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install pinned compile dependencies
+        working-directory: integrations/openclaw-onebridge
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Compile TypeScript plugin
+        working-directory: integrations/openclaw-onebridge
+        run: npm run build
