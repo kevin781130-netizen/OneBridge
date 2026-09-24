@@ -29,7 +29,7 @@ This file maps the original OneBridge backlog to the current repository.
 
 The next high-value work is to replace mocks with real adapters while preserving the already-built control-plane boundaries:
 
-1. Qualify Flowise, Open Design, and Hermes against pinned upstream deployments.
+1. Run the implemented `onebridge qualify` harness against pinned Flowise, Open Design, and Hermes deployments.
 2. Add compatibility qualification fixtures and candidate promotion around those real adapters.
 3. Register the existing OpenClaw shim as native OpenClaw tools and map LINE progress/errors.
 4. Add Review Portal UI for visual revision/approval.
