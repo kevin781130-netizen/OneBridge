@@ -36,7 +36,7 @@ def build_service(settings: Settings | None = None) -> OneBridgeService:
 
     return DurableOneBridgeService(
         db,
-        build_adapter_registry(settings),
+        build_adapter_registry(settings, store=store),
         store,
         audit=HashChainAuditLog(settings.audit_log),
         checkpoints=CheckpointStore(settings.checkpoint_root),
