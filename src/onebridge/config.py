@@ -114,6 +114,9 @@ class Settings:
     adapter_plugins: tuple[str, ...] = _env_csv(
         "ONEBRIDGE_ADAPTER_PLUGINS"
     )
+    context_plugins: tuple[str, ...] = _env_csv(
+        "ONEBRIDGE_CONTEXT_PLUGINS"
+    )
     output_routes: dict[str, str] = field(
         default_factory=lambda: _env_json_object(
             "ONEBRIDGE_OUTPUT_ROUTES_JSON"
