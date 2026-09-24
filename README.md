@@ -10,23 +10,23 @@ The repository now contains a runnable foundation with substantial infrastructur
 
 - Task Contract v1 with Pydantic validation.
 - Durable SQL task/project/artifact/approval records.
-- Replaceable adapter protocol and mock adapters.
+- Replaceable adapter protocol, mock fallbacks, and a configurable real Flowise Prediction adapter.
 - Validated adapter registry with duplicate/configuration rejection.
 - Immutable content-addressed local/S3-compatible artifact storage.
-- SQLite durable worker queue with claim/finish/fail/requeue semantics.
-- Strong sandbox boundary for worker execution.
+- SQLite and PostgreSQL durable worker queues with claim/finish/fail/requeue semantics.
+- Strong sandbox boundary plus bounded process supervisor and subprocess-adapter primitive.
 - Dependency-aware workflow graph and digest-validated checkpoints.
 - Generic revision snapshots and rollback.
 - Compatibility matrix with active/candidate promotion.
-- Tamper-evident hash-chain audit log.
-- Workspace/API-key identity store.
+- Tamper-evident, secret-redacted hash-chain audit log.
+- Workspace/API-key identity store with optional bearer authentication and tenant isolation.
 - Artifact/release SHA-256 integrity verification.
 - Approval-gated release manifest builder.
 - Mock end-to-end workflow: content -> design -> code/test -> review.
 - FastAPI endpoints for submit/status/artifacts/run/approve/retry/cancel.
-- CI tests and a local infrastructure compose file for PostgreSQL + MinIO.
+- CI tests, security/SBOM workflow, and local infrastructure compose for PostgreSQL + MinIO.
 
-The foundation is intentionally separated from real upstream adapters. Real Flowise, Open Design, Hermes, and OpenClaw integrations are the next milestones.
+Flowise can now switch from the mock to a real Prediction API adapter through environment configuration. Open Design, Hermes, and OpenClaw remain the next real integrations.
 
 See:
 
@@ -105,3 +105,17 @@ The current foundation deliberately reuses and generalizes patterns from the own
 - SONICRAFT AI Strings: SHA-256 release integrity and provenance gates.
 
 See `docs/EXTRACTION_MAP.md` for the detailed mapping.
+
+
+## Real Flowise adapter
+
+Set both values to replace the Flowise mock:
+
+```bash
+export ONEBRIDGE_FLOWISE_BASE_URL=http://127.0.0.1:3000
+export ONEBRIDGE_FLOWISE_CHATFLOW_ID=<chatflow-id>
+# optional:
+export ONEBRIDGE_FLOWISE_API_KEY=<chatflow-api-key>
+```
+
+For a remote HTTPS Flowise URL, OneBridge derives a narrow egress rule for the configured host and the `/api/v1` path. Arbitrary `overrideConfig` keys are blocked unless explicitly listed in `ONEBRIDGE_FLOWISE_ALLOWED_OVERRIDE_KEYS`.
