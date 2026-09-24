@@ -57,6 +57,10 @@ def test_openclaw_deployment_can_probe_promote_and_rollback(
     assert promoted.status_code == 200
     assert promoted.json()["state"] == "active"
 
+    active = client.get("/api/v1/deployments/openclaw/active")
+    assert active.status_code == 200
+    assert active.json()["slot"] == "blue"
+
     client.post(
         "/api/v1/deployments/openclaw/green",
         json={
@@ -75,6 +79,14 @@ def test_openclaw_deployment_can_probe_promote_and_rollback(
     )
     assert rollback.status_code == 200
     assert rollback.json()["slot"] == "blue"
+
+    active = client.get("/api/v1/deployments/openclaw/active")
+    assert active.status_code == 200
+    assert active.json()["slot"] == "blue"
+
+    history = client.get("/api/v1/deployments/openclaw/history")
+    assert history.status_code == 200
+    assert history.json() == []
 
     matrix = client.get("/api/v1/deployments/openclaw")
     assert matrix.status_code == 200
