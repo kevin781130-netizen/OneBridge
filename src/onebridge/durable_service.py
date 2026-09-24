@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from .audit import HashChainAuditLog
 from .checkpoints import CheckpointStore
-from .contracts import ApprovalRequest, TaskContract
+from .contracts import ApprovalRequest, TaskContract, TextArtifactRevisionRequest
 from .db import TaskRecord
 from .service import OneBridgeService
 from .workflow_graph import default_pipeline
@@ -104,6 +104,27 @@ class DurableOneBridgeService(OneBridgeService):
             payload={"status": result["status"], "artifact_count": len(artifacts)},
         )
         return result
+
+    def revise_text_artifact(
+        self,
+        task_id: str,
+        artifact_id: str,
+        request: TextArtifactRevisionRequest,
+    ):
+        revised = super().revise_text_artifact(task_id, artifact_id, request)
+        self.audit.append(
+            "artifact.revised",
+            actor=request.actor,
+            task_id=task_id,
+            artifact_id=revised.artifact_id,
+            payload={
+                "parent_artifact_id": artifact_id,
+                "revision": revised.revision,
+                "sha256": revised.sha256,
+                "reason": request.reason,
+            },
+        )
+        return revised
 
     def approve(self, task_id: str, request: ApprovalRequest) -> dict:
         result = super().approve(task_id, request)
