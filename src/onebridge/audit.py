@@ -5,6 +5,7 @@ import json
 import os
 import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -41,6 +42,41 @@ class HashChainAuditLog:
         self.path = Path(path).expanduser().resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
+    @contextmanager
+    def _process_lock(self):
+        lock_path = self.path.with_suffix(self.path.suffix + ".lock")
+        fd = os.open(
+            lock_path,
+            os.O_RDWR | os.O_CREAT,
+            0o600,
+        )
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                if os.path.getsize(lock_path) == 0:
+                    os.write(fd, b"0")
+                    os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+            finally:
+                os.close(fd)
+
     def _last_hash(self) -> str:
         if not self.path.exists():
             return "0" * 64
@@ -65,42 +101,43 @@ class HashChainAuditLog:
         artifact_id: str | None = None,
         payload: dict[str, Any] | None = None,
     ) -> AuditEvent:
-        previous_hash = self._last_hash()
-        safe_payload = redact_value(payload or {})
-        body = {
-            "event_id": f"evt_{uuid.uuid4().hex}",
-            "ts": time.time(),
-            "event_type": redact_text(str(event_type)),
-            "actor": redact_text(str(actor)),
-            "task_id": redact_text(task_id) if task_id is not None else None,
-            "artifact_id": redact_text(artifact_id) if artifact_id is not None else None,
-            "payload": safe_payload if isinstance(safe_payload, dict) else {},
-            "previous_hash": previous_hash,
-        }
-        event_hash = hashlib.sha256(
-            previous_hash.encode("ascii") + _canonical(body)
-        ).hexdigest()
-        event = AuditEvent(**body, event_hash=event_hash)
-        raw = (
-            json.dumps(
-                asdict(event),
-                ensure_ascii=False,
-                sort_keys=True,
-                separators=(",", ":"),
+        with self._process_lock():
+            previous_hash = self._last_hash()
+            safe_payload = redact_value(payload or {})
+            body = {
+                "event_id": f"evt_{uuid.uuid4().hex}",
+                "ts": time.time(),
+                "event_type": redact_text(str(event_type)),
+                "actor": redact_text(str(actor)),
+                "task_id": redact_text(task_id) if task_id is not None else None,
+                "artifact_id": redact_text(artifact_id) if artifact_id is not None else None,
+                "payload": safe_payload if isinstance(safe_payload, dict) else {},
+                "previous_hash": previous_hash,
+            }
+            event_hash = hashlib.sha256(
+                previous_hash.encode("ascii") + _canonical(body)
+            ).hexdigest()
+            event = AuditEvent(**body, event_hash=event_hash)
+            raw = (
+                json.dumps(
+                    asdict(event),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                + "\n"
+            ).encode("utf-8")
+            fd = os.open(
+                self.path,
+                os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+                0o600,
             )
-            + "\n"
-        ).encode("utf-8")
-        fd = os.open(
-            self.path,
-            os.O_WRONLY | os.O_CREAT | os.O_APPEND,
-            0o600,
-        )
-        try:
-            os.write(fd, raw)
-            os.fsync(fd)
-        finally:
-            os.close(fd)
-        return event
+            try:
+                os.write(fd, raw)
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+            return event
 
     def verify(self) -> dict[str, Any]:
         previous_hash = "0" * 64
