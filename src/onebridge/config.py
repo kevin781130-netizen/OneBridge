@@ -95,8 +95,6 @@ class Settings:
     line_required_outputs: tuple[str, ...] = _env_csv(
         "ONEBRIDGE_LINE_REQUIRED_OUTPUTS"
     ) or ("content", "design", "code", "test_report")
-    line_auto_run: bool = _env_bool("ONEBRIDGE_LINE_AUTO_RUN", False)
-
     adapter_plugins: tuple[str, ...] = _env_csv(
         "ONEBRIDGE_ADAPTER_PLUGINS"
     )
