@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from .adapters.factory import build_adapter_registry
@@ -16,6 +16,7 @@ from .contracts import ApprovalRequest, TaskContract, TextArtifactRevisionReques
 from .db import Database, ProjectRecord, TaskRecord
 from .durable_service import DurableOneBridgeService
 from .identity import IdentityStore
+from .line_messaging import LineMessagingClient, LineMessagingError, LineWebhookController
 from .line_progress import map_task_progress
 from .release_gate import evaluate_release_gate
 from .review import compare_artifacts
@@ -64,6 +65,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     service = build_service(settings)
     identities = IdentityStore(settings.identity_db)
     compatibility = CompatibilityService(service.db, service.registry)
+
+    line_values = (
+        settings.line_channel_secret,
+        settings.line_channel_access_token,
+        settings.line_tenant_id,
+    )
+    if any(line_values) and not all(line_values):
+        raise ValueError(
+            "LINE integration requires ONEBRIDGE_LINE_CHANNEL_SECRET, "
+            "ONEBRIDGE_LINE_CHANNEL_ACCESS_TOKEN and ONEBRIDGE_LINE_TENANT_ID"
+        )
+    line_controller = None
+    if all(line_values):
+        line_controller = LineWebhookController(
+            service=service,
+            client=LineMessagingClient(
+                channel_access_token=str(settings.line_channel_access_token),
+            ),
+            channel_secret=str(settings.line_channel_secret),
+            tenant_id=str(settings.line_tenant_id),
+            required_outputs=settings.line_required_outputs,
+        )
+
     app = FastAPI(title="OneBridge Control Plane", version="0.1.0")
 
     def current_auth(
@@ -90,6 +114,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/review/{task_id}", response_class=HTMLResponse)
     def review_portal(task_id: str) -> HTMLResponse:
         return HTMLResponse(render_review_portal(task_id))
+
+    @app.post("/integrations/line/webhook")
+    async def line_webhook(
+        request: Request,
+        x_line_signature: str | None = Header(
+            default=None,
+            alias="X-Line-Signature",
+        ),
+    ) -> dict:
+        if line_controller is None:
+            raise HTTPException(
+                status_code=503,
+                detail="LINE integration is not configured",
+            )
+        raw_body = await request.body()
+        try:
+            results = line_controller.handle(
+                raw_body,
+                signature=x_line_signature,
+            )
+        except LineMessagingError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"ok": True, "events": results}
 
     @app.get("/health")
     def health() -> dict:
@@ -343,6 +390,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="task not found") from exc
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/v1/tasks/{task_id}/line/push-progress")
+    def line_push_progress(
+        task_id: str,
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> dict:
+        enforce_task_scope(task_id, auth)
+        if line_controller is None:
+            raise HTTPException(
+                status_code=503,
+                detail="LINE integration is not configured",
+            )
+        try:
+            contract = service.contract(task_id)
+            status_value = service.status(task_id)
+            artifact_count = len(service.artifacts(task_id))
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="task not found") from exc
+        if contract.context.channel != "line" or not contract.context.conversation_id:
+            raise HTTPException(
+                status_code=409,
+                detail="task has no LINE conversation binding",
+            )
+        progress = map_task_progress(
+            status_value["status"],
+            task_id=task_id,
+            artifact_count=artifact_count,
+            error=status_value.get("error"),
+        )
+        try:
+            line_controller.client.push_progress(
+                contract.context.conversation_id,
+                progress,
+            )
+        except LineMessagingError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return progress.to_dict()
 
     @app.get("/api/v1/tasks/{task_id}/release-gate")
     def release_gate(
