@@ -9,9 +9,16 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from .redaction import redact_text, redact_value
+
 
 def _canonical(value: dict[str, Any]) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +35,7 @@ class AuditEvent:
 
 
 class HashChainAuditLog:
-    """Append-only hash-chain audit log inspired by Vera's immutable run snapshots."""
+    """Append-only, secret-redacted, tamper-evident audit log."""
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path).expanduser().resolve()
@@ -59,20 +66,35 @@ class HashChainAuditLog:
         payload: dict[str, Any] | None = None,
     ) -> AuditEvent:
         previous_hash = self._last_hash()
+        safe_payload = redact_value(payload or {})
         body = {
             "event_id": f"evt_{uuid.uuid4().hex}",
             "ts": time.time(),
-            "event_type": str(event_type),
-            "actor": str(actor),
-            "task_id": task_id,
-            "artifact_id": artifact_id,
-            "payload": payload or {},
+            "event_type": redact_text(str(event_type)),
+            "actor": redact_text(str(actor)),
+            "task_id": redact_text(task_id) if task_id is not None else None,
+            "artifact_id": redact_text(artifact_id) if artifact_id is not None else None,
+            "payload": safe_payload if isinstance(safe_payload, dict) else {},
             "previous_hash": previous_hash,
         }
-        event_hash = hashlib.sha256(previous_hash.encode("ascii") + _canonical(body)).hexdigest()
+        event_hash = hashlib.sha256(
+            previous_hash.encode("ascii") + _canonical(body)
+        ).hexdigest()
         event = AuditEvent(**body, event_hash=event_hash)
-        raw = (json.dumps(asdict(event), ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
-        fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        raw = (
+            json.dumps(
+                asdict(event),
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n"
+        ).encode("utf-8")
+        fd = os.open(
+            self.path,
+            os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+            0o600,
+        )
         try:
             os.write(fd, raw)
             os.fsync(fd)
@@ -92,9 +114,19 @@ class HashChainAuditLog:
                 payload = json.loads(line)
                 event_hash = payload.pop("event_hash", None)
                 if payload.get("previous_hash") != previous_hash:
-                    return {"valid": False, "events": count, "reason": "previous_hash_mismatch"}
-                expected = hashlib.sha256(previous_hash.encode("ascii") + _canonical(payload)).hexdigest()
+                    return {
+                        "valid": False,
+                        "events": count,
+                        "reason": "previous_hash_mismatch",
+                    }
+                expected = hashlib.sha256(
+                    previous_hash.encode("ascii") + _canonical(payload)
+                ).hexdigest()
                 if event_hash != expected:
-                    return {"valid": False, "events": count, "reason": "event_hash_mismatch"}
+                    return {
+                        "valid": False,
+                        "events": count,
+                        "reason": "event_hash_mismatch",
+                    }
                 previous_hash = expected
         return {"valid": True, "events": count, "head": previous_hash}
