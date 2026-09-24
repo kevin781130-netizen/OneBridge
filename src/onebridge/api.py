@@ -9,6 +9,7 @@ from .artifacts import LocalObjectStore, S3ObjectStore
 from .audit import HashChainAuditLog
 from .auth import AuthContext, AuthenticationError, authenticate_bearer, require_tenant
 from .checkpoints import CheckpointStore
+from .compatibility_service import CompatibilityService
 from .config import Settings
 from .contracts import ApprovalRequest, TaskContract, TextArtifactRevisionRequest
 from .db import Database, ProjectRecord, TaskRecord
@@ -55,6 +56,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     service = build_service(settings)
     identities = IdentityStore(settings.identity_db)
+    compatibility = CompatibilityService(service.db, service.registry)
     app = FastAPI(title="OneBridge Control Plane", version="0.1.0")
 
     def current_auth(
@@ -102,6 +104,79 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 },
             })
         return result
+
+    @app.get("/api/v1/compatibility")
+    def compatibility_matrix(
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> list[dict]:
+        return [
+            CompatibilityService.as_dict(item)
+            for item in compatibility.list()
+        ]
+
+    @app.post("/api/v1/adapters/{adapter_id}/compatibility/candidate")
+    def register_adapter_candidate(
+        adapter_id: str,
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> dict:
+        try:
+            status = compatibility.register_current(adapter_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="adapter not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return CompatibilityService.as_dict(status)
+
+    @app.post("/api/v1/adapters/{adapter_id}/qualify")
+    def qualify_adapter_endpoint(
+        adapter_id: str,
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> dict:
+        try:
+            result = compatibility.qualify_current(adapter_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="adapter not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return result.to_dict()
+
+    @app.post("/api/v1/adapters/{adapter_id}/compatibility/{version}/promote")
+    def promote_adapter(
+        adapter_id: str,
+        version: str,
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> dict:
+        try:
+            status = compatibility.promote(adapter_id, version)
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="compatibility entry not found",
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return CompatibilityService.as_dict(status)
+
+    @app.post("/api/v1/adapters/{adapter_id}/compatibility/{version}/block")
+    def block_adapter(
+        adapter_id: str,
+        version: str,
+        payload: dict | None = None,
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> dict:
+        notes = str((payload or {}).get("notes") or "")[:2000]
+        try:
+            status = compatibility.block(
+                adapter_id,
+                version,
+                notes=notes,
+            )
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="compatibility entry not found",
+            ) from exc
+        return CompatibilityService.as_dict(status)
 
     @app.get("/api/v1/audit/verify")
     def verify_audit(auth: AuthContext | None = Depends(current_auth)) -> dict:
