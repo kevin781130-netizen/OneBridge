@@ -26,6 +26,8 @@ from .review_portal import render_review_portal
 from .sdk import ContextPluginContext, load_context_plugins
 from .service import OneBridgeService
 from .telemetry import build_telemetry
+from .workers.factory import build_worker_queue
+from .workers.task_runner import TaskScheduler
 
 
 def build_service(settings: Settings | None = None) -> OneBridgeService:
@@ -77,6 +79,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     service = build_service(settings)
     identities = IdentityStore(settings.identity_db)
     compatibility = CompatibilityService(service.db, service.registry)
+    task_scheduler = None
+    if settings.task_queue_url:
+        task_scheduler = TaskScheduler(
+            build_worker_queue(settings.task_queue_url)
+        )
 
     line_values = (
         settings.line_channel_secret,
@@ -157,6 +164,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "version": "0.1.0",
             "adapters": service.registry.names(),
             "auth_required": settings.require_api_key,
+            "task_queue_enabled": task_scheduler is not None,
         }
 
     @app.get("/api/v1/adapters")
@@ -266,7 +274,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             except AuthenticationError as exc:
                 raise HTTPException(status_code=403, detail=str(exc)) from exc
         try:
-            return service.submit(contract)
+            result = service.submit(contract)
+            if task_scheduler is not None:
+                dispatch = task_scheduler.schedule(contract.task_id)
+                result["execution_job_id"] = dispatch.job_id
+                result["execution_status"] = dispatch.status
+            return result
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -280,6 +293,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return service.status(task_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="task not found") from exc
+
+    @app.get("/api/v1/tasks/{task_id}/execution")
+    def execution_status(
+        task_id: str,
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> dict:
+        enforce_task_scope(task_id, auth)
+        if task_scheduler is None:
+            raise HTTPException(
+                status_code=404,
+                detail="durable task queue is not enabled",
+            )
+        try:
+            service.status(task_id)
+            job = task_scheduler.status(task_id)
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="execution job not found",
+            ) from exc
+        return job.to_dict()
 
     @app.get("/api/v1/tasks/{task_id}/progress")
     def task_progress(
@@ -318,6 +352,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict:
         enforce_task_scope(task_id, auth)
         try:
+            if task_scheduler is not None:
+                service.status(task_id)
+                dispatch = task_scheduler.schedule(task_id)
+                result = service.status(task_id)
+                result["execution_job_id"] = dispatch.job_id
+                result["execution_status"] = dispatch.status
+                return result
             return service.run(task_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="task not found") from exc
@@ -428,7 +469,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict:
         enforce_task_scope(task_id, auth)
         try:
-            return service.retry(task_id)
+            result = service.retry(task_id)
+            if task_scheduler is not None:
+                dispatch = task_scheduler.schedule(task_id)
+                result["execution_job_id"] = dispatch.job_id
+                result["execution_status"] = dispatch.status
+            return result
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="task not found") from exc
         except ValueError as exc:
