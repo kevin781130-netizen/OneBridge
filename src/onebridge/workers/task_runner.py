@@ -50,7 +50,12 @@ class TaskScheduler:
     def __init__(self, queue: TaskQueueProtocol) -> None:
         self.queue = queue
 
-    def schedule(self, task_id: str) -> TaskDispatch:
+    def schedule(
+        self,
+        task_id: str,
+        *,
+        restart: bool = False,
+    ) -> TaskDispatch:
         job_id = task_job_id(task_id)
         job, created = self.queue.enqueue_idempotent(
             task_id=task_id,
@@ -58,7 +63,11 @@ class TaskScheduler:
             payload={"task_id": task_id},
             job_id=job_id,
         )
-        if not created and job.status in {"failed", "succeeded"}:
+        if (
+            restart
+            and not created
+            and job.status in {"failed", "succeeded"}
+        ):
             job = self.queue.requeue(job_id)
         return TaskDispatch(
             job_id=job.id,
