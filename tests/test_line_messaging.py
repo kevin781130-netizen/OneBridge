@@ -8,6 +8,7 @@ import pytest
 from onebridge.line_messaging import (
     LineInboundMessage,
     LineMessagingError,
+    LineTaskProgressNotifier,
     LineWebhookController,
     parse_line_webhook,
     verify_line_signature,
@@ -172,3 +173,54 @@ def test_line_controller_dispatches_submitted_task_when_scheduler_present():
     task_id = service.contracts[0].task_id
     assert scheduler.task_ids == [task_id]
     assert result[0]["status"] == "queued"
+
+
+class NotifyService:
+    def contract(self, task_id):
+        from onebridge.contracts import TaskContract
+
+        return TaskContract.model_validate({
+            "task_id": task_id,
+            "input": {
+                "goal": "Build",
+                "required_outputs": ["content"],
+            },
+            "context": {
+                "tenant_id": "tenant",
+                "user_id": "user",
+                "channel": "line",
+                "conversation_id": "Uconversation",
+            },
+        })
+
+    def status(self, task_id):
+        return {
+            "task_id": task_id,
+            "status": "succeeded",
+            "error": None,
+        }
+
+    def artifacts(self, task_id):
+        return [object(), object()]
+
+
+class PushClient:
+    def __init__(self):
+        self.values = []
+
+    def push_progress(self, target, progress):
+        self.values.append((target, progress))
+        return {}
+
+
+def test_line_background_notifier_pushes_safe_terminal_progress():
+    client = PushClient()
+    notifier = LineTaskProgressNotifier(
+        service=NotifyService(),
+        client=client,
+    )
+    assert notifier("task_1") is True
+    target, progress = client.values[0]
+    assert target == "Uconversation"
+    assert progress.code == "OB_TASK_SUCCEEDED"
+    assert progress.artifact_count == 2
