@@ -6,6 +6,7 @@ from uuid import uuid4
 from sqlalchemy import select
 
 from .adapters.base import AdapterRegistry, AdapterRequest
+from .adapters.validation import validate_adapter_outputs
 from .artifacts import LocalObjectStore, S3ObjectStore
 from .contracts import ApprovalRequest, ArtifactManifest, TaskContract
 from .db import ApprovalRecord, ArtifactRecord, Database, ProjectRecord, TaskRecord
@@ -119,6 +120,15 @@ class OneBridgeService:
                     artifact_inputs=[a.model_dump() for a in self.artifacts(task_id)],
                 )
                 result = adapter.execute(request)
+                report = validate_adapter_outputs(
+                    result.outputs,
+                    expected_kind=kind,
+                )
+                if not report.valid:
+                    raise RuntimeError(
+                        f"adapter {adapter_name} output validation failed: "
+                        + "; ".join(report.errors)
+                    )
                 matched = [output for output in result.outputs if output.kind == kind]
                 if not matched:
                     raise RuntimeError(f"adapter {adapter_name} did not produce required output {kind}")
