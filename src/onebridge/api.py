@@ -239,6 +239,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "selected_artifact_ids": list(decision.selected_artifact_ids),
         }
 
+    @app.post("/api/v1/tasks/{task_id}/release")
+    def release(
+        task_id: str,
+        auth: AuthContext | None = Depends(current_auth),
+    ) -> dict:
+        enforce_task_scope(task_id, auth)
+        try:
+            return service.release(task_id).model_dump()
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="task not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
     @app.post("/api/v1/tasks/{task_id}/cancel")
     def cancel(
         task_id: str,
