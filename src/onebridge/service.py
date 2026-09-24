@@ -109,68 +109,124 @@ class OneBridgeService:
             session.commit()
 
         try:
-            completed_kinds: set[str] = set()
-            for existing in self.artifacts(task_id):
-                completed_kinds.add(existing.kind)
-            produced_ids = [a.artifact_id for a in self.artifacts(task_id)]
+            existing_artifacts = self.artifacts(task_id)
+            completed_kinds = {item.kind for item in existing_artifacts}
+            produced_ids = [item.artifact_id for item in existing_artifacts]
 
             for kind in contract.input.required_outputs:
                 if kind in completed_kinds:
                     continue
+
                 adapter_name = OUTPUT_ADAPTER.get(kind)
                 if not adapter_name:
-                    raise RuntimeError(f"no adapter route for output kind: {kind}")
+                    raise RuntimeError(
+                        f"no adapter route for output kind: {kind}"
+                    )
                 adapter = self.registry.get(adapter_name)
+
+                missing_for_adapter = [
+                    required
+                    for required in contract.input.required_outputs
+                    if (
+                        required not in completed_kinds
+                        and OUTPUT_ADAPTER.get(required) == adapter_name
+                    )
+                ]
+                lineage = list(produced_ids)
                 request = AdapterRequest(
                     task_id=contract.task_id,
                     project_id=contract.project_id,
                     goal=contract.input.goal,
                     operation=contract.operation,
                     inputs=contract.metadata,
-                    artifact_inputs=[a.model_dump() for a in self.artifacts(task_id)],
+                    artifact_inputs=[
+                        item.model_dump()
+                        for item in self.artifacts(task_id)
+                    ],
                 )
                 result = adapter.execute(request)
-                report = validate_adapter_outputs(
-                    result.outputs,
-                    expected_kind=kind,
-                )
-                if not report.valid:
+
+                for required_kind in missing_for_adapter:
+                    report = validate_adapter_outputs(
+                        result.outputs,
+                        expected_kind=required_kind,
+                    )
+                    if not report.valid:
+                        raise RuntimeError(
+                            f"adapter {adapter_name} output validation failed: "
+                            + "; ".join(report.errors)
+                        )
+
+                selected = {}
+                for output in result.outputs:
+                    if (
+                        output.kind in missing_for_adapter
+                        and output.kind not in selected
+                    ):
+                        selected[output.kind] = output
+
+                missing = [
+                    required
+                    for required in missing_for_adapter
+                    if required not in selected
+                ]
+                if missing:
                     raise RuntimeError(
-                        f"adapter {adapter_name} output validation failed: "
-                        + "; ".join(report.errors)
+                        f"adapter {adapter_name} did not produce required outputs: "
+                        + ", ".join(missing)
                     )
-                matched = [output for output in result.outputs if output.kind == kind]
-                if not matched:
-                    raise RuntimeError(f"adapter {adapter_name} did not produce required output {kind}")
-                output = matched[0]
-                stored = self.store.put_bytes(output.content, filename=output.filename)
+
                 with self.db.Session() as session:
-                    revision = 1 + (session.scalar(select(ArtifactRecord.revision).where(
-                        ArtifactRecord.task_id == task_id,
-                        ArtifactRecord.kind == kind,
-                    ).order_by(ArtifactRecord.revision.desc()).limit(1)) or 0)
-                    record = ArtifactRecord(
-                        id=f"art_{uuid4().hex}",
-                        project_id=contract.project_id,
-                        task_id=contract.task_id,
-                        revision=revision,
-                        kind=kind,
-                        media_type=output.media_type,
-                        sha256=stored.sha256,
-                        uri=stored.uri,
-                        producer_adapter=adapter.name,
-                        producer_version=adapter.version,
-                        status="awaiting_review" if contract.policy.approval == "before_publish" else "approved",
-                        input_artifacts_json=json.dumps(produced_ids),
-                    )
-                    session.add(record)
+                    for produced_kind in missing_for_adapter:
+                        output = selected[produced_kind]
+                        stored = self.store.put_bytes(
+                            output.content,
+                            filename=output.filename,
+                        )
+                        revision = 1 + (
+                            session.scalar(
+                                select(ArtifactRecord.revision)
+                                .where(
+                                    ArtifactRecord.task_id == task_id,
+                                    ArtifactRecord.kind == produced_kind,
+                                )
+                                .order_by(ArtifactRecord.revision.desc())
+                                .limit(1)
+                            )
+                            or 0
+                        )
+                        record = ArtifactRecord(
+                            id=f"art_{uuid4().hex}",
+                            project_id=contract.project_id,
+                            task_id=contract.task_id,
+                            revision=revision,
+                            kind=produced_kind,
+                            media_type=output.media_type,
+                            sha256=stored.sha256,
+                            uri=stored.uri,
+                            producer_adapter=adapter.name,
+                            producer_version=adapter.version,
+                            status=(
+                                "awaiting_review"
+                                if contract.policy.approval == "before_publish"
+                                else "approved"
+                            ),
+                            input_artifacts_json=json.dumps(lineage),
+                        )
+                        session.add(record)
+                        session.flush()
+                        produced_ids.append(record.id)
+                        completed_kinds.add(produced_kind)
                     session.commit()
-                    produced_ids.append(record.id)
 
             with self.db.Session() as session:
                 task = session.get(TaskRecord, task_id)
                 assert task is not None
-                task.status = "waiting_approval" if contract.policy.approval == "before_publish" else "succeeded"
+                task.status = (
+                    "waiting_approval"
+                    if contract.policy.approval == "before_publish"
+                    else "succeeded"
+                )
                 task.project.status = task.status
                 session.commit()
         except Exception as exc:
