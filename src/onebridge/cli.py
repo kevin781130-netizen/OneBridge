@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import socket
 
 from .api import build_service, create_app
 from .config import Settings
 from .db import Database
 from .qualification import qualify_adapter
+from .workers.factory import build_worker_queue
+from .workers.task_runner import TaskWorker
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -16,6 +20,14 @@ def main(argv: list[str] | None = None) -> int:
     serve = sub.add_parser("serve")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
+
+    worker = sub.add_parser("worker")
+    worker.add_argument("--once", action="store_true")
+    worker.add_argument("--poll", type=float, default=None)
+    worker.add_argument(
+        "--name",
+        default=f"{socket.gethostname()}-{os.getpid()}",
+    )
 
     qualify = sub.add_parser("qualify")
     qualify.add_argument(
@@ -36,6 +48,40 @@ def main(argv: list[str] | None = None) -> int:
         import uvicorn
 
         uvicorn.run(create_app(), host=args.host, port=args.port)
+        return 0
+
+    if args.command == "worker":
+        settings = Settings()
+        if not settings.task_queue_url:
+            print(
+                "ONEBRIDGE_TASK_QUEUE_URL is required for background worker",
+            )
+            return 5
+        service = build_service(settings)
+        queue = build_worker_queue(settings.task_queue_url)
+        task_worker = TaskWorker(
+            service,
+            queue,
+            worker_id=args.name,
+            workspace_parent=settings.state_root / "task-worker",
+            preserve_failed_workspace=settings.worker_preserve_failed_workspace,
+        )
+        if args.once:
+            result = task_worker.run_one()
+            print(json.dumps({
+                "worked": result.worked,
+                "job_id": result.job_id,
+                "status": result.status,
+                "error": result.error,
+            }, indent=2, sort_keys=True))
+            return 0 if result.worked and result.status == "succeeded" else 2
+        task_worker.run_forever(
+            poll_seconds=(
+                args.poll
+                if args.poll is not None
+                else settings.worker_poll_seconds
+            )
+        )
         return 0
 
     if args.command == "qualify":
