@@ -1,0 +1,223 @@
+from __future__ import annotations
+
+import json
+from uuid import uuid4
+
+from sqlalchemy import select
+
+from .adapters.base import AdapterRegistry, AdapterRequest
+from .artifacts import LocalObjectStore, S3ObjectStore
+from .contracts import ApprovalRequest, ArtifactManifest, TaskContract
+from .db import ApprovalRecord, ArtifactRecord, Database, ProjectRecord, TaskRecord
+
+
+OUTPUT_ADAPTER = {
+    "content": "flowise",
+    "design": "open_design",
+    "code": "hermes",
+    "test_report": "hermes",
+}
+
+
+class OneBridgeService:
+    def __init__(self, db: Database, registry: AdapterRegistry, store: LocalObjectStore | S3ObjectStore) -> None:
+        self.db = db
+        self.registry = registry
+        self.store = store
+
+    def submit(self, contract: TaskContract) -> dict:
+        with self.db.Session() as session:
+            if session.get(TaskRecord, contract.task_id):
+                raise ValueError("task_id already exists")
+            project = session.get(ProjectRecord, contract.project_id)
+            if project is None:
+                project = ProjectRecord(
+                    id=contract.project_id,
+                    tenant_id=contract.context.tenant_id,
+                    status="received",
+                    goal=contract.input.goal,
+                )
+                session.add(project)
+            task = TaskRecord(
+                id=contract.task_id,
+                project_id=contract.project_id,
+                operation=contract.operation,
+                status="queued",
+                contract_json=contract.model_dump_json(),
+            )
+            session.add(task)
+            session.commit()
+        return self.status(contract.task_id)
+
+    def status(self, task_id: str) -> dict:
+        with self.db.Session() as session:
+            task = session.get(TaskRecord, task_id)
+            if task is None:
+                raise KeyError(task_id)
+            return {
+                "task_id": task.id,
+                "project_id": task.project_id,
+                "status": task.status,
+                "attempt": task.attempt,
+                "error": task.error,
+            }
+
+    def artifacts(self, task_id: str) -> list[ArtifactManifest]:
+        with self.db.Session() as session:
+            rows = list(session.scalars(select(ArtifactRecord).where(ArtifactRecord.task_id == task_id).order_by(ArtifactRecord.created_at)))
+            return [
+                ArtifactManifest(
+                    artifact_id=row.id,
+                    project_id=row.project_id,
+                    task_id=row.task_id,
+                    revision=row.revision,
+                    kind=row.kind,
+                    media_type=row.media_type,
+                    sha256=row.sha256,
+                    uri=row.uri,
+                    producer_adapter=row.producer_adapter,
+                    producer_version=row.producer_version,
+                    status=row.status,
+                    input_artifacts=json.loads(row.input_artifacts_json or "[]"),
+                )
+                for row in rows
+            ]
+
+    def run(self, task_id: str) -> dict:
+        with self.db.Session() as session:
+            task = session.get(TaskRecord, task_id)
+            if task is None:
+                raise KeyError(task_id)
+            if task.status == "cancelled":
+                raise ValueError("cancelled task cannot run")
+            contract = TaskContract.model_validate_json(task.contract_json)
+            task.status = "running"
+            task.attempt += 1
+            task.error = None
+            task.project.status = "running"
+            session.commit()
+
+        try:
+            completed_kinds: set[str] = set()
+            for existing in self.artifacts(task_id):
+                completed_kinds.add(existing.kind)
+            produced_ids = [a.artifact_id for a in self.artifacts(task_id)]
+
+            for kind in contract.input.required_outputs:
+                if kind in completed_kinds:
+                    continue
+                adapter_name = OUTPUT_ADAPTER.get(kind)
+                if not adapter_name:
+                    raise RuntimeError(f"no adapter route for output kind: {kind}")
+                adapter = self.registry.get(adapter_name)
+                request = AdapterRequest(
+                    task_id=contract.task_id,
+                    project_id=contract.project_id,
+                    goal=contract.input.goal,
+                    operation=contract.operation,
+                    inputs=contract.metadata,
+                    artifact_inputs=[a.model_dump() for a in self.artifacts(task_id)],
+                )
+                result = adapter.execute(request)
+                matched = [output for output in result.outputs if output.kind == kind]
+                if not matched:
+                    raise RuntimeError(f"adapter {adapter_name} did not produce required output {kind}")
+                output = matched[0]
+                stored = self.store.put_bytes(output.content, filename=output.filename)
+                with self.db.Session() as session:
+                    revision = 1 + (session.scalar(select(ArtifactRecord.revision).where(
+                        ArtifactRecord.task_id == task_id,
+                        ArtifactRecord.kind == kind,
+                    ).order_by(ArtifactRecord.revision.desc()).limit(1)) or 0)
+                    record = ArtifactRecord(
+                        id=f"art_{uuid4().hex}",
+                        project_id=contract.project_id,
+                        task_id=contract.task_id,
+                        revision=revision,
+                        kind=kind,
+                        media_type=output.media_type,
+                        sha256=stored.sha256,
+                        uri=stored.uri,
+                        producer_adapter=adapter.name,
+                        producer_version=adapter.version,
+                        status="awaiting_review" if contract.policy.approval == "before_publish" else "approved",
+                        input_artifacts_json=json.dumps(produced_ids),
+                    )
+                    session.add(record)
+                    session.commit()
+                    produced_ids.append(record.id)
+
+            with self.db.Session() as session:
+                task = session.get(TaskRecord, task_id)
+                assert task is not None
+                task.status = "waiting_approval" if contract.policy.approval == "before_publish" else "succeeded"
+                task.project.status = task.status
+                session.commit()
+        except Exception as exc:
+            with self.db.Session() as session:
+                task = session.get(TaskRecord, task_id)
+                if task is not None:
+                    task.status = "failed"
+                    task.error = str(exc)[:8000]
+                    task.project.status = "failed"
+                    session.commit()
+            raise
+        return self.status(task_id)
+
+    def approve(self, task_id: str, request: ApprovalRequest) -> dict:
+        with self.db.Session() as session:
+            task = session.get(TaskRecord, task_id)
+            if task is None:
+                raise KeyError(task_id)
+            rows = list(session.scalars(select(ArtifactRecord).where(
+                ArtifactRecord.task_id == task_id,
+                ArtifactRecord.id.in_(request.artifact_ids),
+            )))
+            if len(rows) != len(set(request.artifact_ids)):
+                raise ValueError("one or more artifact_ids are not part of the task")
+            for artifact in rows:
+                artifact.status = "approved" if request.decision == "approve" else "rejected"
+                session.add(ApprovalRecord(
+                    artifact_id=artifact.id,
+                    decision=request.decision,
+                    actor=request.actor,
+                    reason=request.reason,
+                ))
+            if request.decision == "reject":
+                task.status = "blocked"
+                task.project.status = "waiting_approval"
+            else:
+                remaining = session.scalar(select(ArtifactRecord.id).where(
+                    ArtifactRecord.task_id == task_id,
+                    ArtifactRecord.status != "approved",
+                ).limit(1))
+                if remaining is None:
+                    task.status = "succeeded"
+                    task.project.status = "approved"
+            session.commit()
+        return self.status(task_id)
+
+    def retry(self, task_id: str) -> dict:
+        with self.db.Session() as session:
+            task = session.get(TaskRecord, task_id)
+            if task is None:
+                raise KeyError(task_id)
+            if task.status not in {"failed", "blocked"}:
+                raise ValueError("retry is only valid for failed or blocked tasks")
+            task.status = "queued"
+            task.error = None
+            task.project.status = "planned"
+            session.commit()
+        return self.status(task_id)
+
+    def cancel(self, task_id: str) -> dict:
+        with self.db.Session() as session:
+            task = session.get(TaskRecord, task_id)
+            if task is None:
+                raise KeyError(task_id)
+            if task.status in {"succeeded", "cancelled"}:
+                return self.status(task_id)
+            task.status = "cancelled"
+            task.project.status = "cancelled"
+            session.commit()
+        return self.status(task_id)
