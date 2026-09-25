@@ -42,6 +42,25 @@ class Operator:
             "owner": owner,
         }
 
+    def approval(self, approval_id):
+        return {
+            "approval_id": approval_id,
+            "decision": "approve",
+            "actor": "release-manager",
+        }
+
+    def approvals(self):
+        return [self.approval("relapp_1")]
+
+    def revoke(self, approval_id, *, actor, reason):
+        return {
+            "approval_id": approval_id,
+            "target_slot": "green",
+            "decision": "revoked",
+            "actor": actor,
+            "reason": reason,
+        }
+
     def lease(self):
         return None
 
@@ -147,3 +166,23 @@ def test_approve_execute_and_reconcile(monkeypatch):
     )
     assert reconciled.status_code == 200
     assert deployments.observed == ("green", "new")
+
+
+def test_release_approval_history_and_revoke(monkeypatch):
+    c, _ = client(monkeypatch)
+
+    history = c.get(
+        "/api/v1/releases/production/approvals"
+    )
+    assert history.status_code == 200
+    assert history.json()[0]["approval_id"] == "relapp_1"
+
+    revoked = c.post(
+        "/api/v1/releases/production/approvals/relapp_1/revoke",
+        json={
+            "actor": "release-manager",
+            "reason": "hold",
+        },
+    )
+    assert revoked.status_code == 200
+    assert revoked.json()["decision"] == "revoked"
