@@ -284,8 +284,7 @@ def build_release_router(
                 raise ValueError(
                     "reconcile smoke response must report active_slot"
                 )
-            active = deployments.reconcile(
-                "openclaw",
+            result = controller.reconcile(
                 observed_slot=observed.reported_active_slot,
                 observed_version=observed.reported_version,
             )
@@ -299,8 +298,8 @@ def build_release_router(
                 status_code=409,
                 detail=str(exc),
             ) from exc
-        result = DeploymentSwitchService.as_dict(active)
         if audit is not None:
+            deployment = result["deployment"]
             audit.append(
                 "production_release.reconciled",
                 actor=(
@@ -312,8 +311,10 @@ def build_release_router(
                     )
                 ),
                 payload={
-                    "slot": active.slot,
-                    "version": active.version,
+                    "release_id": result.get("release_id"),
+                    "slot": deployment["slot"],
+                    "version": deployment["version"],
+                    "outcome": result["outcome"],
                 },
             )
         return result
