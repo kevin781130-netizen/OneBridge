@@ -99,6 +99,11 @@ def main(argv: list[str] | None = None) -> int:
         default=socket.gethostname(),
     )
 
+    revoke = sub.add_parser("revoke")
+    revoke.add_argument("--approval-id", required=True)
+    revoke.add_argument("--actor", required=True)
+    revoke.add_argument("--reason", default="")
+
     status = sub.add_parser("status")
     status.add_argument("--release-id")
     status.add_argument("--approval-id")
@@ -158,6 +163,25 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, indent=2, sort_keys=True))
             return 0 if result.get("status") == "succeeded" else 6
 
+        if args.command == "revoke":
+            result = operator.revoke(
+                args.approval_id,
+                actor=args.actor,
+                reason=args.reason,
+            )
+            audit = getattr(service, "audit", None)
+            if audit is not None:
+                audit.append(
+                    "production_release.approval_revoked",
+                    actor=args.actor,
+                    payload={
+                        "approval_id": args.approval_id,
+                        "target_slot": result["target_slot"],
+                    },
+                )
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return 0
+
         if args.command == "status":
             if args.approval_id:
                 result = operator.approval(args.approval_id)
@@ -166,6 +190,7 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 result = {
                     "lease": operator.lease(),
+                    "approvals": operator.approvals(),
                     "releases": controller.list(),
                     "deployment_actions": deployments.actions(
                         "openclaw"
