@@ -273,6 +273,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version: str,
         auth: AuthContext | None = Depends(current_auth),
     ) -> dict:
+        if settings.release_controller_required:
+            raise HTTPException(
+                status_code=409,
+                detail="direct adapter promotion is disabled; use production release controller",
+            )
         try:
             status = compatibility.promote(adapter_id, version)
         except KeyError as exc:
@@ -386,6 +391,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         slot: str,
         auth: AuthContext | None = Depends(current_auth),
     ) -> dict:
+        if settings.release_controller_required:
+            raise HTTPException(
+                status_code=409,
+                detail="direct deployment promotion is disabled; use production release controller",
+            )
         try:
             status = deployments.promote("openclaw", slot)
         except KeyError as exc:
