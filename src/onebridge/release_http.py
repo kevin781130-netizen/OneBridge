@@ -63,6 +63,113 @@ def build_release_router(
             ) from exc
         return plan.to_dict()
 
+    @router.post("/requests")
+    def request_release(
+        payload: dict,
+        auth=Depends(current_auth),
+    ) -> dict:
+        adapters = payload.get(
+            "adapters",
+            ["flowise", "open_design", "hermes"],
+        )
+        if not isinstance(adapters, list) or not all(
+            isinstance(item, str)
+            for item in adapters
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="adapters must be a string array",
+            )
+        try:
+            plan = operator.plan(
+                str(payload.get("target_slot") or ""),
+                adapters,
+            )
+            result = operator.request(
+                plan,
+                actor=actor(auth, payload),
+                reason=str(payload.get("reason") or ""),
+            )
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="deployment or adapter not found",
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=str(exc),
+            ) from exc
+        if audit is not None:
+            audit.append(
+                "production_release.requested",
+                actor=result["requested_by"],
+                payload={
+                    "request_id": result["request_id"],
+                    "target_slot": result["target_slot"],
+                    "fingerprint": result["fingerprint"],
+                },
+            )
+        return result
+
+    @router.get("/requests")
+    def list_requests(
+        auth=Depends(current_auth),
+    ) -> list[dict]:
+        return operator.requests()
+
+    @router.get("/requests/{request_id}")
+    def request_status(
+        request_id: str,
+        auth=Depends(current_auth),
+    ) -> dict:
+        try:
+            return operator.request_status(request_id)
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="release request not found",
+            ) from exc
+
+    @router.post("/requests/{request_id}/approve")
+    def approve_request(
+        request_id: str,
+        payload: dict,
+        auth=Depends(current_auth),
+    ) -> dict:
+        try:
+            result = operator.approve_request(
+                request_id,
+                actor=actor(auth, payload),
+                decision=str(
+                    payload.get("decision") or "approve"
+                ),
+                reason=str(payload.get("reason") or ""),
+            )
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="release request not found",
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=str(exc),
+            ) from exc
+        if audit is not None:
+            audit.append(
+                "production_release.request_decided",
+                actor=result["actor"],
+                payload={
+                    "request_id": request_id,
+                    "approval_id": result["approval_id"],
+                    "decision": result["decision"],
+                    "target_slot": result["target_slot"],
+                    "fingerprint": result["fingerprint"],
+                },
+            )
+        return result
+
     @router.post("/approve")
     def approve_release(
         payload: dict,
@@ -231,6 +338,7 @@ def build_release_router(
     ) -> dict:
         return {
             "lease": operator.lease(),
+            "requests": operator.requests(),
             "approvals": operator.approvals(),
             "releases": controller.list(),
             "deployment_actions": deployments.actions(
