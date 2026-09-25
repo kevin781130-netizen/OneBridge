@@ -206,6 +206,39 @@ class ProductionReleaseRecord(Base):
     )
 
 
+class ReleaseLeaseRecord(Base):
+    __tablename__ = "release_leases"
+
+    service: Mapped[str] = mapped_column(String(100), primary_key=True)
+    release_id: Mapped[str] = mapped_column(String(96), index=True)
+    owner: Mapped[str] = mapped_column(String(200))
+    acquired_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+    )
+
+
+class ReleaseApprovalRecord(Base):
+    __tablename__ = "release_approvals"
+
+    id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    service: Mapped[str] = mapped_column(String(100), index=True)
+    target_slot: Mapped[str] = mapped_column(String(40), index=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    adapters_json: Mapped[str] = mapped_column(Text, default="[]")
+    decision: Mapped[str] = mapped_column(String(20), index=True)
+    actor: Mapped[str] = mapped_column(String(200))
+    reason: Mapped[str] = mapped_column(Text, default="")
+    consumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+    )
+
+
 class Database:
     def __init__(self, url: str) -> None:
         connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
