@@ -36,6 +36,7 @@ See:
 - `docs/REAL_ADAPTERS.md`
 - `docs/CHANNELS_AND_SDK.md`
 - `docs/DEPLOYMENT_AND_WORKERS.md`
+- `docs/RELEASE_OPERATOR.md`
 - `docs/PROVENANCE.md`
 
 ## Quick start
@@ -261,3 +262,17 @@ transitions.
 ```text
 GET /api/v1/deployments/openclaw/history
 ```
+
+
+## Production release operator
+
+`onebridge-release` provides plan, approve, execute, status, and reconcile
+commands around the guarded production release controller. Approvals are
+single-use, expire fail-closed, bind the exact deployment/adapter topology, and
+a database lease prevents concurrent OpenClaw release operations.
+
+Set `ONEBRIDGE_RELEASE_CONTROLLER_REQUIRED=true` to block direct HTTP
+promotion and require the release-controller path. External OpenClaw actuation
+also enables this protection automatically.
+
+See `docs/RELEASE_OPERATOR.md`.
