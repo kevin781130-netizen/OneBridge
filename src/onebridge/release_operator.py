@@ -252,6 +252,66 @@ class ProductionReleaseOperator:
                 "created_at": row.created_at.isoformat(),
             }
 
+    def revoke(
+        self,
+        approval_id: str,
+        *,
+        actor: str,
+        reason: str = "",
+    ) -> dict:
+        actor_value = str(actor or "").strip()
+        if not actor_value:
+            raise ValueError("release revocation actor is required")
+        with self.db.Session() as session:
+            row = session.get(ReleaseApprovalRecord, approval_id)
+            if row is None:
+                raise KeyError(approval_id)
+            if row.consumed_at is not None:
+                raise ValueError(
+                    "consumed release approval cannot be revoked"
+                )
+            if row.decision != "approve":
+                raise ValueError(
+                    "only an approved release can be revoked"
+                )
+            row.decision = "revoked"
+            row.actor = actor_value[:200]
+            row.reason = str(reason or "revoked by operator")[:4000]
+            session.commit()
+        return self.approval(approval_id)
+
+    def approvals(self, *, limit: int = 50) -> list[dict]:
+        from sqlalchemy import select
+
+        with self.db.Session() as session:
+            rows = list(
+                session.scalars(
+                    select(ReleaseApprovalRecord)
+                    .order_by(
+                        ReleaseApprovalRecord.created_at.desc()
+                    )
+                    .limit(max(1, min(int(limit), 200)))
+                )
+            )
+            return [
+                {
+                    "approval_id": row.id,
+                    "service": row.service,
+                    "target_slot": row.target_slot,
+                    "fingerprint": row.fingerprint,
+                    "decision": row.decision,
+                    "actor": row.actor,
+                    "reason": row.reason,
+                    "consumed_at": (
+                        row.consumed_at.isoformat()
+                        if row.consumed_at is not None
+                        else None
+                    ),
+                    "created_at": row.created_at.isoformat(),
+                }
+                for row in rows
+            ]
+
     def _acquire(
         self,
         release_id: str,
