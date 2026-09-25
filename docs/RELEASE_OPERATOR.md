@@ -97,3 +97,10 @@ Release-admin authorization is also applied to global release mutations such as
 adapter qualification/block/promotion and OpenClaw candidate/probe/promotion/
 rollback operations. Normal tenant keys can continue to use tenant-scoped task
 APIs but cannot mutate global production-release state.
+
+
+When strict release-controller mode or an external OpenClaw switching hook is
+enabled, OneBridge also refuses unauthenticated HTTP release controls. Use
+`ONEBRIDGE_REQUIRE_API_KEY=true` plus
+`ONEBRIDGE_RELEASE_ADMIN_WORKSPACES`, or run the local operator CLI from a
+trusted host.
