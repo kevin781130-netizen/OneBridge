@@ -205,6 +205,78 @@ class ProductionReleaseController:
         self._save(release_id, "succeeded", evidence)
         return self.get(release_id)
 
+    def reconcile(
+        self,
+        *,
+        observed_slot: str,
+        observed_version: str | None = None,
+    ) -> dict:
+        active = self.deployments.reconcile(
+            "openclaw",
+            observed_slot=observed_slot,
+            observed_version=observed_version,
+        )
+        release_id: str | None = None
+        outcome = "deployment_only"
+
+        with self.db.Session() as session:
+            row = session.scalar(
+                select(ProductionReleaseRecord)
+                .where(
+                    ProductionReleaseRecord.service == "openclaw",
+                    ProductionReleaseRecord.status == "reconcile_required",
+                )
+                .order_by(
+                    ProductionReleaseRecord.updated_at.desc()
+                )
+                .limit(1)
+            )
+            if row is not None:
+                release_id = row.id
+                try:
+                    evidence = json.loads(
+                        row.evidence_json or "{}"
+                    )
+                except json.JSONDecodeError:
+                    evidence = {}
+                if not isinstance(evidence, dict):
+                    evidence = {}
+
+                if active.slot == row.target_slot:
+                    outcome = "target_observed_new_approval_required"
+                elif (
+                    row.previous_slot is not None
+                    and active.slot == row.previous_slot
+                ):
+                    outcome = "previous_observed_release_aborted"
+                else:
+                    outcome = "observed_slot_reconciled"
+
+                evidence["reconciliation"] = {
+                    "active_slot": active.slot,
+                    "active_version": active.version,
+                    "outcome": outcome,
+                }
+                row.evidence_json = json.dumps(
+                    evidence,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+                row.status = "reconciled"
+                row.error = (
+                    "reconciliation resolved deployment state; "
+                    "new approval required for another release attempt"
+                )
+                session.commit()
+
+        return {
+            "deployment": DeploymentSwitchService.as_dict(
+                active
+            ),
+            "release_id": release_id,
+            "outcome": outcome,
+        }
+
     def get(self, release_id: str) -> dict:
         with self.db.Session() as session:
             row = session.get(ProductionReleaseRecord, release_id)
