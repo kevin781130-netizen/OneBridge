@@ -28,6 +28,7 @@ class ReleasePlan:
     smoke_url: str | None
     external_actuation: bool
     adapters: tuple[tuple[str, str], ...]
+    adapter_states: tuple[tuple[str, str], ...]
     fingerprint: str
 
     def to_dict(self) -> dict:
@@ -35,6 +36,10 @@ class ReleasePlan:
         value["adapters"] = [
             {"adapter_id": adapter_id, "version": version}
             for adapter_id, version in self.adapters
+        ]
+        value["adapter_states"] = [
+            {"adapter_id": adapter_id, "state": state}
+            for adapter_id, state in self.adapter_states
         ]
         return value
 
@@ -81,6 +86,7 @@ class ProductionReleaseOperator:
             raise ValueError("release plan adapter set cannot be empty")
 
         adapters: list[tuple[str, str]] = []
+        adapter_states: list[tuple[str, str]] = []
         for adapter_id in requested:
             adapter = self.controller.compatibility.registry.get(
                 adapter_id
@@ -90,7 +96,28 @@ class ProductionReleaseOperator:
                 raise ValueError(
                     f"{adapter.name}:mock adapter cannot enter a production plan"
                 )
+            state = "unregistered"
+            compatibility_get = getattr(
+                self.controller.compatibility,
+                "get",
+                None,
+            )
+            if callable(compatibility_get):
+                try:
+                    status = compatibility_get(
+                        adapter.name,
+                        version,
+                    )
+                except KeyError:
+                    status = None
+                if status is not None:
+                    state = str(status.state)
+            if state == "blocked":
+                raise ValueError(
+                    f"{adapter.name}@{version}:blocked adapter cannot enter a production plan"
+                )
             adapters.append((adapter.name, version))
+            adapter_states.append((adapter.name, state))
 
         previous = next(
             (
@@ -120,7 +147,14 @@ class ProductionReleaseOperator:
                 self.controller.deployments.actuator is not None
             ),
             "adapters": [
-                {"adapter_id": name, "version": version}
+                {
+                    "adapter_id": name,
+                    "version": version,
+                    "state": dict(adapter_states).get(
+                        name,
+                        "unregistered",
+                    ),
+                }
                 for name, version in adapters
             ],
         }
@@ -152,6 +186,7 @@ class ProductionReleaseOperator:
                 self.controller.deployments.actuator is not None
             ),
             adapters=tuple(adapters),
+            adapter_states=tuple(adapter_states),
             fingerprint=fingerprint,
         )
 
