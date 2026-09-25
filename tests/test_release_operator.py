@@ -34,6 +34,8 @@ class Compatibility:
 
 
 class Controller:
+    smoke_url = None
+
     def __init__(self, db, registry):
         self.compatibility = Compatibility(registry)
         self.deployments = DeploymentSwitchService(db)
