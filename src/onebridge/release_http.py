@@ -203,14 +203,20 @@ def build_release_router(
         auth=Depends(current_auth),
     ) -> dict:
         smoke_url = str(
-            payload.get("smoke_url")
-            or controller.smoke_url
-            or ""
+            controller.smoke_url or ""
         ).strip()
         if not smoke_url:
             raise HTTPException(
                 status_code=409,
-                detail="stable smoke URL is required",
+                detail="configured stable smoke URL is required",
+            )
+        requested_url = str(
+            payload.get("smoke_url") or ""
+        ).strip()
+        if requested_url and requested_url != smoke_url:
+            raise HTTPException(
+                status_code=409,
+                detail="reconcile smoke URL must match configured stable path",
             )
         try:
             observed = probe_deployment(
