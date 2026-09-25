@@ -69,6 +69,12 @@ class Settings:
         "ONEBRIDGE_RELEASE_CONTROLLER_REQUIRED",
         False,
     )
+    release_approval_ttl_seconds: float = float(
+        os.getenv("ONEBRIDGE_RELEASE_APPROVAL_TTL_SECONDS", "1800")
+    )
+    release_lease_ttl_seconds: float = float(
+        os.getenv("ONEBRIDGE_RELEASE_LEASE_TTL_SECONDS", "1800")
+    )
     openclaw_actuator_url: str | None = os.getenv(
         "ONEBRIDGE_OPENCLAW_ACTUATOR_URL"
     )
