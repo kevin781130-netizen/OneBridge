@@ -221,6 +221,7 @@ def main(argv: list[str] | None = None) -> int:
             report = evaluate_production_readiness(
                 settings,
                 service.registry,
+                service.db,
             )
             print(json.dumps(
                 report.to_dict(),
