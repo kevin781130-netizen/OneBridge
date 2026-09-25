@@ -76,3 +76,18 @@ Reconciliation probes only the configured
 `ONEBRIDGE_OPENCLAW_SMOKE_URL`. The stable path must report `active_slot`;
 if it reports `version`, the registry also verifies that version before
 reconciling a pending deployment action.
+
+
+## Release API authorization
+
+When `ONEBRIDGE_REQUIRE_API_KEY=true`, production release endpoints are
+fail-closed unless the authenticated workspace is explicitly listed:
+
+```bash
+export ONEBRIDGE_RELEASE_ADMIN_WORKSPACES=ws_release_admin
+```
+
+A valid tenant API key that is not in this allowlist receives HTTP 403 for the
+release operator API. An empty allowlist also returns 403. This is intentionally
+separate from normal task tenant isolation while broader RBAC/SSO remains a
+future layer.
