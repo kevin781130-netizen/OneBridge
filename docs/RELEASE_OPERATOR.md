@@ -4,11 +4,18 @@ Production changes can be driven through the approval-gated release operator.
 
 ## Flow
 
+For production, enable `ONEBRIDGE_RELEASE_TWO_PERSON_REQUIRED=true` and use
+the persisted request path:
+
 1. Build a release plan for a blue/green slot and adapter set.
-2. Approve the exact plan fingerprint.
-3. Execute the approval once.
-4. Observe release status and deployment actions.
-5. Reconcile only from the configured stable traffic health path when needed.
+2. Persist the plan as a release request owned by the requester.
+3. Have a different release-admin identity approve the exact request fingerprint.
+4. Execute the single-use approval from an identity other than the approver.
+5. Observe release status and deployment actions.
+6. Reconcile only from the configured stable traffic health path when needed.
+
+The direct `approve` path remains available for non-production compatibility,
+but is rejected when two-person mode is enabled.
 
 The plan fingerprint binds the target slot, deployment version and endpoint,
 current active slot/version, adapter versions, stable smoke URL and whether an
@@ -28,9 +35,11 @@ onebridge-release
 Examples:
 
 ```bash
+onebridge-release readiness
 onebridge-release plan --slot green
-onebridge-release approve --slot green --actor release-manager
-onebridge-release execute --approval-id <approval-id>
+onebridge-release request --slot green --actor release-requester
+onebridge-release approve-request --request-id <request-id> --actor release-approver
+onebridge-release execute --approval-id <approval-id> --owner release-requester
 onebridge-release revoke --approval-id <approval-id> --actor release-manager
 onebridge-release status
 onebridge-release status --release-id <release-id>
@@ -47,11 +56,16 @@ The control plane exposes:
 
 ```text
 POST /api/v1/releases/production/plan
+POST /api/v1/releases/production/requests
+GET  /api/v1/releases/production/requests
+GET  /api/v1/releases/production/requests/{request_id}
+POST /api/v1/releases/production/requests/{request_id}/approve
 POST /api/v1/releases/production/approve
 GET  /api/v1/releases/production/approvals
 GET  /api/v1/releases/production/approvals/{approval_id}
 POST /api/v1/releases/production/approvals/{approval_id}/revoke
 POST /api/v1/releases/production/execute
+GET  /api/v1/releases/production/readiness
 GET  /api/v1/releases/production
 GET  /api/v1/releases/production/status
 GET  /api/v1/releases/production/{release_id}
@@ -104,3 +118,39 @@ enabled, OneBridge also refuses unauthenticated HTTP release controls. Use
 `ONEBRIDGE_REQUIRE_API_KEY=true` plus
 `ONEBRIDGE_RELEASE_ADMIN_WORKSPACES`, or run the local operator CLI from a
 trusted host.
+
+
+## Production readiness gate
+
+When strict release-controller mode is enabled, execution is blocked unless the
+production readiness report passes. The current required checks cover PostgreSQL,
+S3/MinIO artifact storage, API authentication, two-person release policy, at
+least two release-admin workspaces, a complete OpenClaw switching hook, a valid
+stable smoke path, durable task queue, real Flowise/Open Design/Hermes
+configuration, strong Hermes sandboxing, telemetry export, and non-mock runtime
+adapters.
+
+Run the same gate from the CLI:
+
+```bash
+onebridge-release readiness
+```
+
+## Database schema migrations
+
+Database initialization now runs versioned, forward-only schema migrations
+instead of calling SQLAlchemy `create_all()` directly. Existing pre-migration
+databases are adopted with check-first DDL and receive migration history in the
+`schema_migrations` table.
+
+Operator commands:
+
+```bash
+onebridge migrate-db
+onebridge schema-status
+```
+
+The current schema version includes the persistent `release_requests` table
+used by two-person approval. If a database reports a schema version newer than
+the running OneBridge build, migration fails closed rather than attempting a
+downgrade.
