@@ -68,3 +68,32 @@ def test_release_api_fails_closed_without_admin_allowlist(tmp_path: Path):
         headers={"Authorization": f"Bearer {raw}"},
     )
     assert response.status_code == 403
+
+
+def test_global_release_mutations_require_release_admin(tmp_path: Path):
+    settings = make_settings(tmp_path, ("ws_release",))
+    admin_key = key_for(settings, "ws_release")
+    tenant_key = key_for(settings, "ws_tenant")
+    client = TestClient(create_app(settings))
+
+    denied = client.post(
+        "/api/v1/adapters/flowise/compatibility/candidate",
+        headers={"Authorization": f"Bearer {tenant_key}"},
+    )
+    assert denied.status_code == 403
+
+    allowed = client.post(
+        "/api/v1/adapters/flowise/compatibility/candidate",
+        headers={"Authorization": f"Bearer {admin_key}"},
+    )
+    assert allowed.status_code == 200
+
+    deployment_denied = client.post(
+        "/api/v1/deployments/openclaw/green",
+        headers={"Authorization": f"Bearer {tenant_key}"},
+        json={
+            "endpoint": "http://127.0.0.1:4102/health",
+            "version": "candidate",
+        },
+    )
+    assert deployment_denied.status_code == 403
