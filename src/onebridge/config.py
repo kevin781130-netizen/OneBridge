@@ -65,6 +65,10 @@ class Settings:
         "ONEBRIDGE_REQUIRE_QUALIFIED_ADAPTERS",
         False,
     )
+    release_controller_required: bool = _env_bool(
+        "ONEBRIDGE_RELEASE_CONTROLLER_REQUIRED",
+        False,
+    )
     openclaw_actuator_url: str | None = os.getenv(
         "ONEBRIDGE_OPENCLAW_ACTUATOR_URL"
     )
