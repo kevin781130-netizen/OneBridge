@@ -57,7 +57,8 @@ class Operator:
             "approval_id": approval_id,
             "target_slot": "green",
             "decision": "revoked",
-            "actor": actor,
+            "actor": "original-approver",
+            "revoked_by": actor,
             "reason": reason,
         }
 
