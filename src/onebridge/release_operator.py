@@ -6,12 +6,14 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from .db import (
     Database,
     ReleaseApprovalRecord,
     ReleaseLeaseRecord,
+    ReleaseRequestRecord,
     utcnow,
 )
 from .production_release import ProductionReleaseController
@@ -55,6 +57,7 @@ class ProductionReleaseOperator:
         *,
         lease_max_age_seconds: float = 1800.0,
         approval_max_age_seconds: float = 1800.0,
+        two_person_required: bool = False,
     ) -> None:
         self.db = db
         self.controller = controller
@@ -66,6 +69,7 @@ class ProductionReleaseOperator:
             60.0,
             float(approval_max_age_seconds),
         )
+        self.two_person_required = bool(two_person_required)
 
     def plan(
         self,
@@ -198,12 +202,26 @@ class ProductionReleaseOperator:
         actor: str,
         decision: str = "approve",
         reason: str = "",
+        request_id: str | None = None,
+        requested_by: str | None = None,
     ) -> dict:
         if decision not in {"approve", "reject"}:
             raise ValueError("release decision must be approve or reject")
         actor_value = str(actor or "").strip()
         if not actor_value:
             raise ValueError("release approval actor is required")
+        requester_value = str(requested_by or "").strip() or None
+        if self.two_person_required and not request_id:
+            raise ValueError(
+                "two-person release approval requires a persisted release request"
+            )
+        if (
+            requester_value is not None
+            and actor_value == requester_value
+        ):
+            raise ValueError(
+                "release requester and approver must be different identities"
+            )
 
         approval_id = f"relapp_{uuid4().hex}"
         with self.db.Session() as session:
@@ -215,8 +233,10 @@ class ProductionReleaseOperator:
                     fingerprint=plan.fingerprint,
                     adapters_json=json.dumps(
                         {
-                            "schema": 2,
+                            "schema": 3,
                             "plan": plan.to_dict(),
+                            "request_id": request_id,
+                            "requested_by": requester_value,
                         },
                         ensure_ascii=False,
                         sort_keys=True,
@@ -230,26 +250,32 @@ class ProductionReleaseOperator:
         return self.approval(approval_id)
 
     @staticmethod
-    def _stored_plan(raw: str) -> dict:
+    def _stored_payload(raw: str) -> dict:
         try:
             value = json.loads(raw or "[]")
         except json.JSONDecodeError:
             return {}
-        if (
-            isinstance(value, dict)
-            and value.get("schema") == 2
-            and isinstance(value.get("plan"), dict)
-        ):
-            return dict(value["plan"])
+        if isinstance(value, dict):
+            return dict(value)
         if isinstance(value, list):
-            return {"adapters": value}
+            return {
+                "schema": 1,
+                "plan": {"adapters": value},
+            }
         return {}
+
+    @classmethod
+    def _stored_plan(cls, raw: str) -> dict:
+        payload = cls._stored_payload(raw)
+        plan = payload.get("plan")
+        return dict(plan) if isinstance(plan, dict) else {}
 
     def approval(self, approval_id: str) -> dict:
         with self.db.Session() as session:
             row = session.get(ReleaseApprovalRecord, approval_id)
             if row is None:
                 raise KeyError(approval_id)
+            payload = self._stored_payload(row.adapters_json)
             return {
                 "approval_id": row.id,
                 "service": row.service,
@@ -258,6 +284,8 @@ class ProductionReleaseOperator:
                 "decision": row.decision,
                 "actor": row.actor,
                 "reason": row.reason,
+                "request_id": payload.get("request_id"),
+                "requested_by": payload.get("requested_by"),
                 "plan": self._stored_plan(row.adapters_json),
                 "consumed_at": (
                     row.consumed_at.isoformat()
@@ -266,6 +294,136 @@ class ProductionReleaseOperator:
                 ),
                 "created_at": row.created_at.isoformat(),
             }
+
+    def request(
+        self,
+        plan: ReleasePlan,
+        *,
+        actor: str,
+        reason: str = "",
+    ) -> dict:
+        actor_value = str(actor or "").strip()
+        if not actor_value:
+            raise ValueError("release requester is required")
+        request_id = f"relreq_{uuid4().hex}"
+        with self.db.Session() as session:
+            session.add(
+                ReleaseRequestRecord(
+                    id=request_id,
+                    service=plan.service,
+                    target_slot=plan.target_slot,
+                    fingerprint=plan.fingerprint,
+                    plan_json=json.dumps(
+                        plan.to_dict(),
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    ),
+                    requested_by=redact_text(actor_value)[:200],
+                    reason=redact_text(str(reason or ""))[:4000],
+                    status="pending",
+                )
+            )
+            session.commit()
+        return self.request_status(request_id)
+
+    def request_status(self, request_id: str) -> dict:
+        with self.db.Session() as session:
+            row = session.get(ReleaseRequestRecord, request_id)
+            if row is None:
+                raise KeyError(request_id)
+            try:
+                plan = json.loads(row.plan_json or "{}")
+            except json.JSONDecodeError:
+                plan = {}
+            return {
+                "request_id": row.id,
+                "service": row.service,
+                "target_slot": row.target_slot,
+                "fingerprint": row.fingerprint,
+                "requested_by": row.requested_by,
+                "reason": row.reason,
+                "status": row.status,
+                "plan": plan if isinstance(plan, dict) else {},
+                "created_at": row.created_at.isoformat(),
+                "updated_at": row.updated_at.isoformat(),
+            }
+
+    def requests(self, *, limit: int = 50) -> list[dict]:
+        with self.db.Session() as session:
+            ids = list(
+                session.scalars(
+                    select(ReleaseRequestRecord.id)
+                    .order_by(
+                        ReleaseRequestRecord.created_at.desc()
+                    )
+                    .limit(max(1, min(int(limit), 200)))
+                )
+            )
+        return [self.request_status(value) for value in ids]
+
+    def approve_request(
+        self,
+        request_id: str,
+        *,
+        actor: str,
+        decision: str = "approve",
+        reason: str = "",
+    ) -> dict:
+        request_value = self.request_status(request_id)
+        if request_value["status"] != "pending":
+            raise ValueError("release request is not pending")
+        actor_value = str(actor or "").strip()
+        if not actor_value:
+            raise ValueError("release approval actor is required")
+        if actor_value == request_value["requested_by"]:
+            raise ValueError(
+                "release requester and approver must be different identities"
+            )
+
+        plan_snapshot = request_value.get("plan")
+        if not isinstance(plan_snapshot, dict):
+            raise ValueError("release request plan is invalid")
+        adapters = plan_snapshot.get("adapters", [])
+        if not isinstance(adapters, list):
+            raise ValueError("release request adapter set is invalid")
+        adapter_ids = [
+            str(item.get("adapter_id") or "")
+            for item in adapters
+            if isinstance(item, dict)
+        ]
+        current = self.plan(
+            request_value["target_slot"],
+            adapter_ids,
+        )
+        if current.fingerprint != request_value["fingerprint"]:
+            with self.db.Session() as session:
+                row = session.get(
+                    ReleaseRequestRecord,
+                    request_id,
+                )
+                if row is not None:
+                    row.status = "stale"
+                    session.commit()
+            raise ValueError("release request is stale")
+
+        approval = self.approve(
+            current,
+            actor=actor_value,
+            decision=decision,
+            reason=reason,
+            request_id=request_id,
+            requested_by=request_value["requested_by"],
+        )
+        with self.db.Session() as session:
+            row = session.get(ReleaseRequestRecord, request_id)
+            if row is not None:
+                row.status = (
+                    "approved"
+                    if decision == "approve"
+                    else "rejected"
+                )
+                session.commit()
+        return approval
 
     def revoke(
         self,
@@ -299,8 +457,6 @@ class ProductionReleaseOperator:
         return result
 
     def approvals(self, *, limit: int = 50) -> list[dict]:
-        from sqlalchemy import select
-
         with self.db.Session() as session:
             rows = list(
                 session.scalars(
@@ -386,6 +542,25 @@ class ProductionReleaseOperator:
             raise ValueError("release approval was not approved")
         if approval["consumed_at"] is not None:
             raise ValueError("release approval has already been consumed")
+        if self.two_person_required:
+            requester = str(
+                approval.get("requested_by") or ""
+            ).strip()
+            request_id = str(
+                approval.get("request_id") or ""
+            ).strip()
+            if not requester or not request_id:
+                raise ValueError(
+                    "two-person release approval metadata is missing"
+                )
+            if requester == approval["actor"]:
+                raise ValueError(
+                    "release requester and approver must be different identities"
+                )
+            if str(owner or "").strip() == approval["actor"]:
+                raise ValueError(
+                    "release approver cannot execute the same production release"
+                )
         created = datetime.fromisoformat(approval["created_at"])
         if created.tzinfo is None:
             created = created.replace(tzinfo=timezone.utc)
