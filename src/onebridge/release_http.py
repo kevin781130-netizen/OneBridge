@@ -160,10 +160,11 @@ def build_release_router(
         if audit is not None:
             audit.append(
                 "production_release.approval_revoked",
-                actor=result["actor"],
+                actor=result["revoked_by"],
                 payload={
                     "approval_id": result["approval_id"],
                     "target_slot": result["target_slot"],
+                    "approved_by": result["actor"],
                 },
             )
         return result
