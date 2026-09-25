@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
 from .db import (
@@ -369,6 +369,10 @@ class ProductionReleaseOperator:
         decision: str = "approve",
         reason: str = "",
     ) -> dict:
+        if decision not in {"approve", "reject"}:
+            raise ValueError(
+                "release decision must be approve or reject"
+            )
         request_value = self.request_status(request_id)
         if request_value["status"] != "pending":
             raise ValueError("release request is not pending")
@@ -397,33 +401,67 @@ class ProductionReleaseOperator:
         )
         if current.fingerprint != request_value["fingerprint"]:
             with self.db.Session() as session:
-                row = session.get(
-                    ReleaseRequestRecord,
-                    request_id,
+                result = session.execute(
+                    update(ReleaseRequestRecord)
+                    .where(
+                        ReleaseRequestRecord.id == request_id,
+                        ReleaseRequestRecord.status == "pending",
+                    )
+                    .values(status="stale")
                 )
-                if row is not None:
-                    row.status = "stale"
+                if result.rowcount == 1:
                     session.commit()
+                else:
+                    session.rollback()
             raise ValueError("release request is stale")
 
-        approval = self.approve(
-            current,
-            actor=actor_value,
-            decision=decision,
-            reason=reason,
-            request_id=request_id,
-            requested_by=request_value["requested_by"],
+        approval_id = f"relapp_{uuid4().hex}"
+        final_status = (
+            "approved"
+            if decision == "approve"
+            else "rejected"
         )
         with self.db.Session() as session:
-            row = session.get(ReleaseRequestRecord, request_id)
-            if row is not None:
-                row.status = (
-                    "approved"
-                    if decision == "approve"
-                    else "rejected"
+            transition = session.execute(
+                update(ReleaseRequestRecord)
+                .where(
+                    ReleaseRequestRecord.id == request_id,
+                    ReleaseRequestRecord.status == "pending",
                 )
-                session.commit()
-        return approval
+                .values(status=final_status)
+            )
+            if transition.rowcount != 1:
+                session.rollback()
+                raise ValueError(
+                    "release request was already decided"
+                )
+            session.add(
+                ReleaseApprovalRecord(
+                    id=approval_id,
+                    service=current.service,
+                    target_slot=current.target_slot,
+                    fingerprint=current.fingerprint,
+                    adapters_json=json.dumps(
+                        {
+                            "schema": 3,
+                            "plan": current.to_dict(),
+                            "request_id": request_id,
+                            "requested_by": request_value[
+                                "requested_by"
+                            ],
+                        },
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    ),
+                    decision=decision,
+                    actor=redact_text(actor_value)[:200],
+                    reason=redact_text(
+                        str(reason or "")
+                    )[:4000],
+                )
+            )
+            session.commit()
+        return self.approval(approval_id)
 
     def revoke(
         self,
