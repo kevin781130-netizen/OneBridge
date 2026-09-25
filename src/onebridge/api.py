@@ -116,6 +116,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     production_operator = ProductionReleaseOperator(
         service.db,
         production_controller,
+        lease_max_age_seconds=settings.release_lease_ttl_seconds,
+        approval_max_age_seconds=settings.release_approval_ttl_seconds,
     )
     task_scheduler = None
     if settings.task_queue_url:
