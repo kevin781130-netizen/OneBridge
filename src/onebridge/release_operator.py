@@ -22,6 +22,9 @@ class ReleasePlan:
     service: str
     target_slot: str
     target_version: str
+    target_endpoint: str
+    previous_slot: str | None
+    previous_version: str | None
     adapters: tuple[tuple[str, str], ...]
     fingerprint: str
 
@@ -43,12 +46,17 @@ class ProductionReleaseOperator:
         controller: ProductionReleaseController,
         *,
         lease_max_age_seconds: float = 1800.0,
+        approval_max_age_seconds: float = 1800.0,
     ) -> None:
         self.db = db
         self.controller = controller
         self.lease_max_age_seconds = max(
             60.0,
             float(lease_max_age_seconds),
+        )
+        self.approval_max_age_seconds = max(
+            60.0,
+            float(approval_max_age_seconds),
         )
 
     def plan(
@@ -75,12 +83,36 @@ class ProductionReleaseOperator:
             adapter = self.controller.compatibility.registry.get(
                 adapter_id
             )
-            adapters.append((adapter.name, str(adapter.version)))
+            version = str(adapter.version)
+            if version.startswith("mock-"):
+                raise ValueError(
+                    f"{adapter.name}:mock adapter cannot enter a production plan"
+                )
+            adapters.append((adapter.name, version))
 
+        previous = next(
+            (
+                item
+                for item in self.controller.deployments.list("openclaw")
+                if item.state == "active"
+            ),
+            None,
+        )
         body = {
             "service": "openclaw",
             "target_slot": target.slot,
             "target_version": target.version,
+            "target_endpoint": target.endpoint,
+            "previous_slot": (
+                previous.slot
+                if previous is not None
+                else None
+            ),
+            "previous_version": (
+                previous.version
+                if previous is not None
+                else None
+            ),
             "adapters": [
                 {"adapter_id": name, "version": version}
                 for name, version in adapters
@@ -98,6 +130,17 @@ class ProductionReleaseOperator:
             service="openclaw",
             target_slot=target.slot,
             target_version=target.version,
+            target_endpoint=target.endpoint,
+            previous_slot=(
+                previous.slot
+                if previous is not None
+                else None
+            ),
+            previous_version=(
+                previous.version
+                if previous is not None
+                else None
+            ),
             adapters=tuple(adapters),
             fingerprint=fingerprint,
         )
@@ -219,6 +262,18 @@ class ProductionReleaseOperator:
             raise ValueError("release approval was not approved")
         if approval["consumed_at"] is not None:
             raise ValueError("release approval has already been consumed")
+        created = datetime.fromisoformat(approval["created_at"])
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        approval_age = (
+            datetime.now(timezone.utc)
+            - created.astimezone(timezone.utc)
+        ).total_seconds()
+        if (
+            approval_age < 0
+            or approval_age > self.approval_max_age_seconds
+        ):
+            raise ValueError("release approval has expired")
 
         with self.db.Session() as session:
             row = session.get(ReleaseApprovalRecord, approval_id)
