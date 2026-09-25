@@ -49,6 +49,7 @@ class ProductionReadinessReport:
 def evaluate_production_readiness(
     settings,
     registry=None,
+    database=None,
 ) -> ProductionReadinessReport:
     checks: list[ReadinessCheck] = []
 
@@ -66,6 +67,17 @@ def evaluate_production_readiness(
                 detail=detail,
                 required=required,
             )
+        )
+
+    if database is not None:
+        try:
+            schema = database.schema_status()
+        except Exception:
+            schema = None
+        add(
+            "database.schema",
+            bool(schema is not None and schema.up_to_date),
+            "database schema must match this OneBridge build",
         )
 
     add(
