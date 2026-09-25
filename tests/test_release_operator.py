@@ -200,10 +200,12 @@ def test_approved_release_can_be_revoked_before_execution(tmp_path: Path):
 
     revoked = operator.revoke(
         approval["approval_id"],
-        actor="release-manager",
+        actor="security-admin",
         reason="hold release",
     )
     assert revoked["decision"] == "revoked"
+    assert revoked["actor"] == "release-manager"
+    assert revoked["revoked_by"] == "security-admin"
     assert operator.approvals()[0]["decision"] == "revoked"
 
     with pytest.raises(ValueError, match="not approved"):
