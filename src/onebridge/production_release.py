@@ -170,6 +170,16 @@ class ProductionReleaseController:
             evidence["smoke"] = smoke.to_dict()
             if not smoke.healthy:
                 raise RuntimeError("smoke unhealthy")
+            if (
+                smoke.reported_active_slot is not None
+                and smoke.reported_active_slot != promoted.slot
+            ):
+                raise RuntimeError("smoke active slot mismatch")
+            if (
+                smoke.reported_version is not None
+                and smoke.reported_version != promoted.version
+            ):
+                raise RuntimeError("smoke version mismatch")
         except Exception as exc:
             errors.append(redact_text(f"smoke:{type(exc).__name__}:{exc}")[:1000])
             self._rollback(release_id, evidence, errors)
