@@ -91,3 +91,52 @@ def test_smoke_failure_rolls_back_before_adapter_promotion(tmp_path: Path, monke
     assert deployments.get("openclaw", "green").state == "standby"
     assert compatibility.get("flowise", "1").state == "candidate"
     assert compatibility.get("open_design", "1").state == "candidate"
+
+
+def test_smoke_identity_mismatch_rolls_back(tmp_path: Path, monkeypatch):
+    db = Database(f"sqlite:///{tmp_path / 'identity.db'}")
+    db.create_all()
+    registry = AdapterRegistry()
+    registry.register(Adapter("flowise", "content"))
+    compatibility = CompatibilityService(db, registry)
+    deployments = DeploymentSwitchService(db)
+
+    deployments.register(
+        "openclaw", "blue",
+        endpoint="http://127.0.0.1:4201/health",
+        version="old",
+    )
+    deployments.record_health("openclaw", "blue", probe())
+    deployments.promote("openclaw", "blue")
+    deployments.register(
+        "openclaw", "green",
+        endpoint="http://127.0.0.1:4202/health",
+        version="new",
+    )
+    monkeypatch.setattr(
+        "onebridge.deployment_switch.probe_deployment",
+        lambda endpoint, timeout_seconds=5.0: probe(),
+    )
+    wrong = ProbeResult(
+        healthy=True,
+        status_code=200,
+        latency_ms=1,
+        content_type="application/json",
+        body_sha256="c" * 64,
+        reported_ok=True,
+        reported_active_slot="blue",
+        reported_version="old",
+    )
+    controller = ProductionReleaseController(
+        db,
+        compatibility,
+        deployments,
+        smoke_url="http://127.0.0.1:4299/health",
+        smoke_probe=lambda endpoint, timeout_seconds=5.0: wrong,
+    )
+
+    result = controller.run("green", ["flowise"])
+
+    assert result["status"] == "rolled_back"
+    assert deployments.get("openclaw", "blue").state == "active"
+    assert compatibility.get("flowise", "1").state == "candidate"
