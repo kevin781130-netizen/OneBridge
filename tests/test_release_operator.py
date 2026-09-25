@@ -198,3 +198,33 @@ def test_approved_release_can_be_revoked_before_execution(tmp_path: Path):
     with pytest.raises(ValueError, match="not approved"):
         operator.execute(approval["approval_id"])
     assert controller.calls == []
+
+
+def test_expired_release_lease_is_reclaimed(tmp_path: Path):
+    db, controller, _ = build(tmp_path)
+    operator = ProductionReleaseOperator(
+        db,
+        controller,
+        lease_max_age_seconds=60,
+    )
+    plan = operator.plan("green", ["flowise"])
+    approval = operator.approve(plan, actor="release-manager")
+
+    with db.Session() as session:
+        session.add(
+            ReleaseLeaseRecord(
+                service="openclaw",
+                release_id="stale-release",
+                owner="dead-worker",
+                acquired_at=(
+                    datetime.now(timezone.utc)
+                    - timedelta(minutes=10)
+                ),
+            )
+        )
+        session.commit()
+
+    assert operator.lease()["expired"] is True
+    result = operator.execute(approval["approval_id"])
+    assert result["status"] == "succeeded"
+    assert operator.lease() is None
