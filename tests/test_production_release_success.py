@@ -91,6 +91,13 @@ def test_release_switches_then_promotes_adapter_set(tmp_path: Path, monkeypatch)
     result = controller.run(
         "green",
         ["flowise", "open_design", "hermes"],
+        governance={
+            "request_id": "relreq_test",
+            "approval_id": "relapp_test",
+            "requested_by": "requester",
+            "approved_by": "approver",
+            "executed_by": "requester",
+        },
     )
 
     assert result["status"] == "succeeded"
@@ -99,3 +106,8 @@ def test_release_switches_then_promotes_adapter_set(tmp_path: Path, monkeypatch)
     assert compatibility.get("flowise", "1").state == "active"
     assert compatibility.get("open_design", "2").state == "active"
     assert compatibility.get("hermes", "3").state == "active"
+
+
+    stored = controller.get(result["release_id"])
+    assert stored["evidence"]["governance"]["request_id"] == "relreq_test"
+    assert stored["evidence"]["governance"]["approved_by"] == "approver"
