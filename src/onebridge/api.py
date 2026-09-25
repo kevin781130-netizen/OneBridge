@@ -210,6 +210,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             readiness=lambda: evaluate_production_readiness(
                 settings,
                 service.registry,
+                service.db,
             ),
             readiness_required=settings.release_controller_required,
         )
