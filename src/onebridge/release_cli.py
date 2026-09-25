@@ -231,7 +231,10 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if report.ready else 7
 
         if args.command == "execute":
-            if settings.release_controller_required:
+            if (
+                settings.release_controller_required
+                or deployments.actuator is not None
+            ):
                 report = evaluate_production_readiness(
                     settings,
                     service.registry,
