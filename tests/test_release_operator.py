@@ -13,6 +13,19 @@ class Adapter:
         self.name = name
         self.version = version
 
+    def health(self):
+        from onebridge.adapters.base import AdapterHealth
+        return AdapterHealth("healthy", "ready")
+
+    def capabilities(self):
+        return ["content"]
+
+    def execute(self, request):
+        raise NotImplementedError
+
+    def cancel(self, external_task_id: str):
+        return None
+
 
 class Compatibility:
     def __init__(self, registry):
