@@ -23,6 +23,7 @@ from .line_messaging import LineMessagingClient, LineMessagingError, LineWebhook
 from .line_progress import map_task_progress
 from .preview import load_artifact_preview
 from .production_release import ProductionReleaseController
+from .production_readiness import evaluate_production_readiness
 from .release_http import build_release_router
 from .release_operator import ProductionReleaseOperator
 from .release_gate import evaluate_release_gate
@@ -206,6 +207,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             deployments=deployments,
             current_auth=current_release_auth,
             audit=getattr(service, "audit", None),
+            readiness=lambda: evaluate_production_readiness(
+                settings,
+                service.registry,
+            ),
+            readiness_required=settings.release_controller_required,
         )
     )
 
