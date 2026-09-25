@@ -18,7 +18,7 @@ def make_settings(tmp_path: Path) -> Settings:
     )
 
 
-def test_direct_promotions_are_blocked(tmp_path: Path):
+def test_strict_release_controls_require_api_auth(tmp_path: Path):
     client = TestClient(create_app(make_settings(tmp_path)))
     a = client.post(
         "/api/v1/adapters/flowise/compatibility/x/promote"
@@ -26,5 +26,5 @@ def test_direct_promotions_are_blocked(tmp_path: Path):
     d = client.post(
         "/api/v1/deployments/openclaw/green/promote"
     )
-    assert a.status_code == 409
-    assert d.status_code == 409
+    assert a.status_code == 403
+    assert d.status_code == 403
