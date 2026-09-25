@@ -213,13 +213,10 @@ class ProductionReleaseOperator:
                     target_slot=plan.target_slot,
                     fingerprint=plan.fingerprint,
                     adapters_json=json.dumps(
-                        [
-                            {
-                                "adapter_id": adapter_id,
-                                "version": version,
-                            }
-                            for adapter_id, version in plan.adapters
-                        ],
+                        {
+                            "schema": 2,
+                            "plan": plan.to_dict(),
+                        },
                         ensure_ascii=False,
                         sort_keys=True,
                     ),
@@ -230,6 +227,22 @@ class ProductionReleaseOperator:
             )
             session.commit()
         return self.approval(approval_id)
+
+    @staticmethod
+    def _stored_plan(raw: str) -> dict:
+        try:
+            value = json.loads(raw or "[]")
+        except json.JSONDecodeError:
+            return {}
+        if (
+            isinstance(value, dict)
+            and value.get("schema") == 2
+            and isinstance(value.get("plan"), dict)
+        ):
+            return dict(value["plan"])
+        if isinstance(value, list):
+            return {"adapters": value}
+        return {}
 
     def approval(self, approval_id: str) -> dict:
         with self.db.Session() as session:
@@ -244,6 +257,7 @@ class ProductionReleaseOperator:
                 "decision": row.decision,
                 "actor": row.actor,
                 "reason": row.reason,
+                "plan": self._stored_plan(row.adapters_json),
                 "consumed_at": (
                     row.consumed_at.isoformat()
                     if row.consumed_at is not None
@@ -302,6 +316,7 @@ class ProductionReleaseOperator:
                     "decision": row.decision,
                     "actor": row.actor,
                     "reason": row.reason,
+                    "plan": self._stored_plan(row.adapters_json),
                     "consumed_at": (
                         row.consumed_at.isoformat()
                         if row.consumed_at is not None
@@ -380,18 +395,15 @@ class ProductionReleaseOperator:
         ):
             raise ValueError("release approval has expired")
 
-        with self.db.Session() as session:
-            row = session.get(ReleaseApprovalRecord, approval_id)
-            if row is None:
-                raise KeyError(approval_id)
-            try:
-                stored = json.loads(row.adapters_json or "[]")
-            except json.JSONDecodeError as exc:
-                raise ValueError("release approval adapter set is invalid") from exc
-
+        stored_plan = approval.get("plan")
+        if not isinstance(stored_plan, dict):
+            raise ValueError("release approval plan is invalid")
+        stored_adapters = stored_plan.get("adapters", [])
+        if not isinstance(stored_adapters, list):
+            raise ValueError("release approval adapter set is invalid")
         adapter_ids = [
             str(item.get("adapter_id") or "")
-            for item in stored
+            for item in stored_adapters
             if isinstance(item, dict)
         ]
         current = self.plan(
