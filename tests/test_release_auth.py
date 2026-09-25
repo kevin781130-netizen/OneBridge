@@ -1,0 +1,70 @@
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+
+from onebridge.api import create_app
+from onebridge.config import Settings
+from onebridge.identity import IdentityStore
+
+
+def make_settings(
+    tmp_path: Path,
+    allowed: tuple[str, ...],
+) -> Settings:
+    return Settings(
+        database_url=f"sqlite:///{tmp_path / 'db.sqlite'}",
+        state_root=tmp_path,
+        storage_root=tmp_path / "objects",
+        checkpoint_root=tmp_path / "checkpoints",
+        audit_log=tmp_path / "audit.jsonl",
+        identity_db=tmp_path / "identity.db",
+        require_api_key=True,
+        release_admin_workspaces=allowed,
+    )
+
+
+def key_for(settings: Settings, workspace_id: str) -> str:
+    identities = IdentityStore(settings.identity_db)
+    try:
+        identities.create_workspace(
+            workspace_id,
+            workspace_id=workspace_id,
+        )
+    except Exception:
+        pass
+    _, raw = identities.create_api_key(
+        workspace_id,
+        "release-test",
+    )
+    return raw
+
+
+def test_release_api_allows_only_configured_admin_workspace(tmp_path: Path):
+    settings = make_settings(tmp_path, ("ws_release",))
+    admin_key = key_for(settings, "ws_release")
+    tenant_key = key_for(settings, "ws_tenant")
+    client = TestClient(create_app(settings))
+
+    allowed = client.get(
+        "/api/v1/releases/production/status",
+        headers={"Authorization": f"Bearer {admin_key}"},
+    )
+    denied = client.get(
+        "/api/v1/releases/production/status",
+        headers={"Authorization": f"Bearer {tenant_key}"},
+    )
+
+    assert allowed.status_code == 200
+    assert denied.status_code == 403
+
+
+def test_release_api_fails_closed_without_admin_allowlist(tmp_path: Path):
+    settings = make_settings(tmp_path, ())
+    raw = key_for(settings, "ws_release")
+    client = TestClient(create_app(settings))
+
+    response = client.get(
+        "/api/v1/releases/production/status",
+        headers={"Authorization": f"Bearer {raw}"},
+    )
+    assert response.status_code == 403
