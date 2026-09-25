@@ -25,6 +25,8 @@ class ReleasePlan:
     target_endpoint: str
     previous_slot: str | None
     previous_version: str | None
+    smoke_url: str | None
+    external_actuation: bool
     adapters: tuple[tuple[str, str], ...]
     fingerprint: str
 
@@ -113,6 +115,10 @@ class ProductionReleaseOperator:
                 if previous is not None
                 else None
             ),
+            "smoke_url": self.controller.smoke_url,
+            "external_actuation": (
+                self.controller.deployments.actuator is not None
+            ),
             "adapters": [
                 {"adapter_id": name, "version": version}
                 for name, version in adapters
@@ -140,6 +146,10 @@ class ProductionReleaseOperator:
                 previous.version
                 if previous is not None
                 else None
+            ),
+            smoke_url=self.controller.smoke_url,
+            external_actuation=(
+                self.controller.deployments.actuator is not None
             ),
             adapters=tuple(adapters),
             fingerprint=fingerprint,
