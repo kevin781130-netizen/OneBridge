@@ -485,10 +485,21 @@ class ProductionReleaseOperator:
                 raise ValueError(
                     "only an approved release can be revoked"
                 )
+            payload = self._stored_payload(row.adapters_json)
             row.decision = "revoked"
             row.reason = redact_text(
                 str(reason or "revoked by operator")
             )[:4000]
+            request_id = str(
+                payload.get("request_id") or ""
+            ).strip()
+            if request_id:
+                request_row = session.get(
+                    ReleaseRequestRecord,
+                    request_id,
+                )
+                if request_row is not None:
+                    request_row.status = "revoked"
             session.commit()
         result = self.approval(approval_id)
         result["revoked_by"] = redact_text(actor_value)[:200]
@@ -514,6 +525,12 @@ class ProductionReleaseOperator:
                     "decision": row.decision,
                     "actor": row.actor,
                     "reason": row.reason,
+                    "request_id": self._stored_payload(
+                        row.adapters_json
+                    ).get("request_id"),
+                    "requested_by": self._stored_payload(
+                        row.adapters_json
+                    ).get("requested_by"),
                     "plan": self._stored_plan(row.adapters_json),
                     "consumed_at": (
                         row.consumed_at.isoformat()
@@ -524,6 +541,20 @@ class ProductionReleaseOperator:
                 }
                 for row in rows
             ]
+
+    def _set_request_status(
+        self,
+        request_id: str | None,
+        status: str,
+    ) -> None:
+        value = str(request_id or "").strip()
+        if not value:
+            return
+        with self.db.Session() as session:
+            row = session.get(ReleaseRequestRecord, value)
+            if row is not None:
+                row.status = str(status)[:24]
+                session.commit()
 
     def _acquire(
         self,
@@ -645,9 +676,31 @@ class ProductionReleaseOperator:
                 row.consumed_at = utcnow()
                 session.commit()
 
-            result = self.controller.run(
-                current.target_slot,
-                [name for name, _ in current.adapters],
+            linked_request_id = str(
+                approval.get("request_id") or ""
+            ).strip() or None
+            self._set_request_status(
+                linked_request_id,
+                "executing",
+            )
+            try:
+                result = self.controller.run(
+                    current.target_slot,
+                    [name for name, _ in current.adapters],
+                )
+            except Exception:
+                self._set_request_status(
+                    linked_request_id,
+                    "failed",
+                )
+                raise
+            self._set_request_status(
+                linked_request_id,
+                (
+                    "completed"
+                    if result.get("status") == "succeeded"
+                    else "failed"
+                ),
             )
             result["approval_id"] = approval_id
             result["plan_fingerprint"] = current.fingerprint
