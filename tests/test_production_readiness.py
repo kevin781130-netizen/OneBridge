@@ -81,3 +81,19 @@ def test_readiness_fails_closed_for_local_or_mock_runtime(tmp_path: Path):
     assert "release.two_person" in report.failures
     assert "release.admins" in report.failures
     assert "adapter.flowise" in report.failures
+
+
+def test_readiness_requires_distinct_release_admin_identities(tmp_path: Path):
+    settings = ready_settings(tmp_path)
+    settings.release_admin_workspaces = (
+        "ws_release_a",
+        "ws_release_a",
+    )
+
+    report = evaluate_production_readiness(
+        settings,
+        Registry(),
+    )
+
+    assert not report.ready
+    assert "release.admins" in report.failures
