@@ -43,7 +43,7 @@ class Controller:
         self.deployments = DeploymentSwitchService(db)
         self.calls = []
 
-    def run(self, slot, adapters):
+    def run(self, slot, adapters, *, governance=None):
         self.calls.append((slot, tuple(adapters)))
         return {
             "release_id": "rel_core",
