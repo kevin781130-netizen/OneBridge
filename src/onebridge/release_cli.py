@@ -220,12 +220,10 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError(
                     "reconcile smoke response must report active_slot"
                 )
-            active = deployments.reconcile(
-                "openclaw",
+            result = controller.reconcile(
                 observed_slot=observed.reported_active_slot,
                 observed_version=observed.reported_version,
             )
-            result = DeploymentSwitchService.as_dict(active)
             print(json.dumps(result, indent=2, sort_keys=True))
             return 0
     except (KeyError, RuntimeError, ValueError) as exc:
