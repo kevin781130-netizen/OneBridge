@@ -69,11 +69,30 @@ class Controller:
     smoke_url = "https://traffic.example.test/health"
     timeout_seconds = 5.0
 
+    def __init__(self, deployments):
+        self.deployments = deployments
+
     def list(self):
         return [{"release_id": "rel_1", "status": "succeeded"}]
 
     def get(self, release_id):
         return {"release_id": release_id, "status": "succeeded"}
+
+    def reconcile(self, *, observed_slot, observed_version):
+        active = self.deployments.reconcile(
+            "openclaw",
+            observed_slot=observed_slot,
+            observed_version=observed_version,
+        )
+        return {
+            "deployment": {
+                "slot": active.slot,
+                "version": active.version,
+                "state": active.state,
+            },
+            "release_id": None,
+            "outcome": "deployment_only",
+        }
 
 
 class Deployments:
@@ -119,7 +138,7 @@ def client(monkeypatch):
     app = FastAPI()
     app.include_router(build_release_router(
         operator=Operator(),
-        controller=Controller(),
+        controller=Controller(deployments),
         deployments=deployments,
         current_auth=auth,
     ))
