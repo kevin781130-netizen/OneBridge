@@ -165,6 +165,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> AuthContext | None:
         auth = current_auth(authorization)
         if not settings.require_api_key:
+            if (
+                settings.release_controller_required
+                or openclaw_actuator is not None
+            ):
+                raise HTTPException(
+                    status_code=403,
+                    detail="production release HTTP controls require API authentication",
+                )
             return auth
         allowed = set(settings.release_admin_workspaces)
         if not allowed:
