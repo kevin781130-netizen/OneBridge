@@ -79,6 +79,29 @@ def main(argv: list[str] | None = None) -> int:
         default="flowise,open_design,hermes",
     )
 
+    request_release = sub.add_parser("request")
+    request_release.add_argument(
+        "--slot",
+        required=True,
+        choices=["blue", "green"],
+    )
+    request_release.add_argument(
+        "--adapters",
+        default="flowise,open_design,hermes",
+    )
+    request_release.add_argument("--actor", required=True)
+    request_release.add_argument("--reason", default="")
+
+    approve_request = sub.add_parser("approve-request")
+    approve_request.add_argument("--request-id", required=True)
+    approve_request.add_argument("--actor", required=True)
+    approve_request.add_argument(
+        "--decision",
+        choices=["approve", "reject"],
+        default="approve",
+    )
+    approve_request.add_argument("--reason", default="")
+
     approve = sub.add_parser("approve")
     approve.add_argument("--slot", required=True, choices=["blue", "green"])
     approve.add_argument(
@@ -108,6 +131,7 @@ def main(argv: list[str] | None = None) -> int:
     status = sub.add_parser("status")
     status.add_argument("--release-id")
     status.add_argument("--approval-id")
+    status.add_argument("--request-id")
 
     reconcile = sub.add_parser("reconcile")
     reconcile.add_argument(
@@ -130,6 +154,51 @@ def main(argv: list[str] | None = None) -> int:
             ).to_dict()
             print(json.dumps(result, indent=2, sort_keys=True))
             return 0
+
+        if args.command == "request":
+            plan_value = operator.plan(
+                args.slot,
+                _adapter_ids(args.adapters),
+            )
+            result = operator.request(
+                plan_value,
+                actor=args.actor,
+                reason=args.reason,
+            )
+            audit = getattr(service, "audit", None)
+            if audit is not None:
+                audit.append(
+                    "production_release.requested",
+                    actor=args.actor,
+                    payload={
+                        "request_id": result["request_id"],
+                        "target_slot": result["target_slot"],
+                        "fingerprint": result["fingerprint"],
+                    },
+                )
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return 0
+
+        if args.command == "approve-request":
+            result = operator.approve_request(
+                args.request_id,
+                actor=args.actor,
+                decision=args.decision,
+                reason=args.reason,
+            )
+            audit = getattr(service, "audit", None)
+            if audit is not None:
+                audit.append(
+                    "production_release.request_decided",
+                    actor=args.actor,
+                    payload={
+                        "request_id": args.request_id,
+                        "approval_id": result["approval_id"],
+                        "decision": result["decision"],
+                    },
+                )
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return 0 if args.decision == "approve" else 3
 
         if args.command == "approve":
             plan_value = operator.plan(
@@ -184,13 +253,16 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "status":
-            if args.approval_id:
+            if args.request_id:
+                result = operator.request_status(args.request_id)
+            elif args.approval_id:
                 result = operator.approval(args.approval_id)
             elif args.release_id:
                 result = controller.get(args.release_id)
             else:
                 result = {
                     "lease": operator.lease(),
+                    "requests": operator.requests(),
                     "approvals": operator.approvals(),
                     "releases": controller.list(),
                     "deployment_actions": deployments.actions(
