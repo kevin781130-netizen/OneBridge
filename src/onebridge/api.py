@@ -212,7 +212,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 service.registry,
                 service.db,
             ),
-            readiness_required=settings.release_controller_required,
+            readiness_required=(
+                settings.release_controller_required
+                or openclaw_actuator is not None
+            ),
         )
     )
 
