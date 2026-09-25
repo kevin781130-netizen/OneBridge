@@ -122,6 +122,9 @@ def test_two_person_request_approval_and_execution_roles(tmp_path: Path):
         owner="requester",
     )
     assert result["status"] == "succeeded"
+    assert operator.request_status(
+        request_value["request_id"]
+    )["status"] == "completed"
     assert controller.calls == [
         (
             "green",
@@ -166,3 +169,26 @@ def test_release_request_can_only_be_decided_once(tmp_path: Path):
     approvals = operator.approvals()
     assert len(approvals) == 1
     assert approvals[0]["approval_id"] == first["approval_id"]
+
+
+def test_revoking_approval_revokes_linked_release_request(tmp_path: Path):
+    operator, _ = build(tmp_path)
+    plan = operator.plan("green", ["flowise"])
+    request_value = operator.request(
+        plan,
+        actor="requester",
+    )
+    approval = operator.approve_request(
+        request_value["request_id"],
+        actor="approver",
+    )
+
+    operator.revoke(
+        approval["approval_id"],
+        actor="security-admin",
+        reason="hold",
+    )
+
+    assert operator.request_status(
+        request_value["request_id"]
+    )["status"] == "revoked"
