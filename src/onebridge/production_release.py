@@ -8,7 +8,7 @@ from sqlalchemy import select
 from .compatibility_service import CompatibilityService
 from .db import Database, ProductionReleaseRecord
 from .deployment_switch import DeploymentSwitchService, probe_deployment, validate_probe_url
-from .redaction import redact_text
+from .redaction import redact_text, redact_value
 from .release_pipeline import AdapterReleasePipeline
 
 
@@ -41,7 +41,13 @@ class ProductionReleaseController:
             None,
         )
 
-    def _create(self, slot: str, previous: str | None, adapters: tuple[str, ...]) -> str:
+    def _create(
+        self,
+        slot: str,
+        previous: str | None,
+        adapters: tuple[str, ...],
+        evidence: dict | None = None,
+    ) -> str:
         release_id = f"rel_{uuid4().hex}"
         with self.db.Session() as session:
             session.add(ProductionReleaseRecord(
@@ -51,7 +57,11 @@ class ProductionReleaseController:
                 previous_slot=previous,
                 status="started",
                 adapters_json=json.dumps(list(adapters)),
-                evidence_json="{}",
+                evidence_json=json.dumps(
+                    evidence or {},
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ),
             ))
             session.commit()
         return release_id
@@ -88,7 +98,13 @@ class ProductionReleaseController:
         self._save(release_id, "rolled_back", evidence, errors[-1] if errors else "rolled_back")
         return True, value.slot
 
-    def run(self, target_slot: str, adapter_ids: list[str] | tuple[str, ...]) -> dict:
+    def run(
+        self,
+        target_slot: str,
+        adapter_ids: list[str] | tuple[str, ...],
+        *,
+        governance: dict | None = None,
+    ) -> dict:
         requested = tuple(dict.fromkeys(x.strip() for x in adapter_ids if x.strip()))
         if not requested:
             raise ValueError("empty adapter release set")
@@ -106,12 +122,17 @@ class ProductionReleaseController:
         if previous is not None and previous.slot == target.slot:
             raise ValueError("target slot already active")
 
+        evidence: dict = {}
+        if governance:
+            evidence["governance"] = redact_value(
+                dict(governance)
+            )
         release_id = self._create(
             target.slot,
             previous.slot if previous else None,
             requested,
+            evidence,
         )
-        evidence: dict = {}
         errors: list[str] = []
 
         qualified = AdapterReleasePipeline(self.compatibility).run(
