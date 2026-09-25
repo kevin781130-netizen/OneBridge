@@ -77,6 +77,12 @@ class Settings:
     openclaw_health_max_age_seconds: float = float(
         os.getenv("ONEBRIDGE_OPENCLAW_HEALTH_MAX_AGE_SECONDS", "300")
     )
+    openclaw_smoke_url: str | None = os.getenv(
+        "ONEBRIDGE_OPENCLAW_SMOKE_URL"
+    )
+    openclaw_smoke_timeout_seconds: float = float(
+        os.getenv("ONEBRIDGE_OPENCLAW_SMOKE_TIMEOUT_SECONDS", "5")
+    )
     task_queue_url: str | None = os.getenv("ONEBRIDGE_TASK_QUEUE_URL")
     worker_poll_seconds: float = float(
         os.getenv("ONEBRIDGE_WORKER_POLL_SECONDS", "2")
