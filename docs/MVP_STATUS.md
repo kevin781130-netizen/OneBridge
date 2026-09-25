@@ -16,12 +16,12 @@ This file maps the original OneBridge backlog to the current repository.
 | OB-010 OpenClaw shim | Implemented foundation | stateless HTTP shim + native OpenClaw TypeScript tool plugin package + Python dispatcher for submit/status/artifacts/approve/retry/cancel |
 | OB-011 LINE progress mapping | Implemented foundation | verified LINE webhook ingress + reply/push transport + channel-safe progress/status mapping |
 | OB-012 Design revision loop | Implemented foundation | human revisions, compare, approve/reject, release controls, text editor and bounded image/PDF preview in Review Portal |
-| OB-013 Approval/release gate | Implemented foundation | latest-required-revision approval semantics + fail-closed release evaluation + release manifest artifact |
+| OB-013 Approval/release gate | Implemented foundation | artifact approvals + production release requests + requester/approver separation + single-use expiring approvals + fail-closed release evaluation |
 | OB-014 Compatibility Matrix | Implemented foundation | persistent candidate/active/blocked registry + stored qualification evidence + atomic multi-adapter release promotion |
 | OB-015 OpenTelemetry | Implemented foundation | optional OTLP/HTTP traces + metrics for task lifecycle and adapter execution |
 | OB-016 Notices/SBOM | Implemented foundation | notices/provenance docs + security workflow + CycloneDX SBOM artifact + secret scan |
-| OB-017 Blue/Green OpenClaw | Implemented foundation | blue/green registry + signed external switching + guarded release controller + approval fingerprint + single-flight lease + smoke rollback/reconcile |
-| OB-018 Tenant / identity | Implemented foundation | workspace/API-key store + optional bearer auth + tenant-scoped task isolation; RBAC/SSO pending |
+| OB-017 Blue/Green OpenClaw | Implemented foundation | blue/green registry + signed external switching + guarded two-person release controller + readiness gate + single-flight lease + smoke rollback/reconcile |
+| OB-018 Tenant / identity | Implemented foundation | workspace/API-key store + bearer auth + tenant-scoped tasks + release-admin allowlist + two-person release identity separation; full RBAC/SSO pending |
 | OB-019 ContextForge | Implemented foundation | explicit knowledge scopes + bounded SHA-256 de-duplicated context selection + provider plugin entry points |
 | OB-020 Adapter marketplace/SDK | Implemented foundation | explicit Python entry-point discovery/loading + plugin contexts + configurable output routing; marketplace UI/distribution pending |
 
@@ -31,6 +31,6 @@ The next high-value work is to replace mocks with real adapters while preserving
 
 1. Run the implemented `onebridge qualify` harness against pinned Flowise, Open Design, and Hermes deployments.
 2. Run live qualification and promote pinned real adapter versions to active.
-3. Exercise the approval-gated production release operator against real blue/green OpenClaw slots, including stable-path smoke and reconcile.
+3. Exercise the two-person production release path against real blue/green OpenClaw slots, including readiness, stable-path smoke, rollback and reconcile.
 4. Exercise the verified LINE webhook/push path against a real LINE Official Account.
 5. Qualify ContextForge providers and adapter SDK packages, then add marketplace/distribution metadata.
