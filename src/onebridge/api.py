@@ -160,6 +160,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except AuthenticationError as exc:
             raise HTTPException(status_code=401, detail=str(exc)) from exc
 
+    def current_release_auth(
+        authorization: str | None = Header(default=None),
+    ) -> AuthContext | None:
+        auth = current_auth(authorization)
+        if not settings.require_api_key:
+            return auth
+        allowed = set(settings.release_admin_workspaces)
+        if not allowed:
+            raise HTTPException(
+                status_code=403,
+                detail="release admin workspace allowlist is not configured",
+            )
+        if auth is None or auth.workspace_id not in allowed:
+            raise HTTPException(
+                status_code=403,
+                detail="workspace is not authorized for production releases",
+            )
+        return auth
+
     def enforce_task_scope(task_id: str, auth: AuthContext | None) -> None:
         if auth is None:
             return
@@ -176,7 +195,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             operator=production_operator,
             controller=production_controller,
             deployments=deployments,
-            current_auth=current_auth,
+            current_auth=current_release_auth,
             audit=getattr(service, "audit", None),
         )
     )
