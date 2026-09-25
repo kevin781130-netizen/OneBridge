@@ -177,6 +177,35 @@ class DeploymentActionRecord(Base):
     )
 
 
+class ProductionReleaseRecord(Base):
+    __tablename__ = "production_releases"
+
+    id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    service: Mapped[str] = mapped_column(String(100), index=True)
+    target_slot: Mapped[str] = mapped_column(String(40), index=True)
+    previous_slot: Mapped[str | None] = mapped_column(
+        String(40),
+        nullable=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        default="started",
+        index=True,
+    )
+    adapters_json: Mapped[str] = mapped_column(Text, default="[]")
+    evidence_json: Mapped[str] = mapped_column(Text, default="{}")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+    )
+
+
 class Database:
     def __init__(self, url: str) -> None:
         connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
