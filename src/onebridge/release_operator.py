@@ -296,7 +296,7 @@ class ProductionReleaseOperator:
         if current.fingerprint != approval["fingerprint"]:
             raise ValueError("release approval is stale")
 
-        run_id = f"run_{uuid4().hex}"
+        run_id = approval_id
         self._acquire(run_id, owner)
         try:
             with self.db.Session() as session:
