@@ -248,3 +248,21 @@ def test_blocked_adapter_cannot_enter_release_plan(tmp_path: Path):
 
     with pytest.raises(ValueError, match="blocked adapter"):
         operator.plan("green", ["flowise"])
+
+
+def test_approval_keeps_immutable_plan_snapshot(tmp_path: Path):
+    db, controller, _ = build(tmp_path)
+    operator = ProductionReleaseOperator(db, controller)
+    plan = operator.plan("green", ["flowise"])
+    approval = operator.approve(
+        plan,
+        actor="release-manager",
+        reason="scheduled release",
+    )
+
+    stored = approval["plan"]
+    assert stored["target_slot"] == "green"
+    assert stored["target_version"] == "2026.9.6"
+    assert stored["target_endpoint"].endswith("/health")
+    assert stored["adapters"][0]["adapter_id"] == "flowise"
+    assert stored["adapters"][0]["version"] == "1.0"
