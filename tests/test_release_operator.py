@@ -1,9 +1,10 @@
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
 from onebridge.adapters.base import AdapterRegistry
-from onebridge.db import Database, ReleaseLeaseRecord
+from onebridge.db import Database, ReleaseApprovalRecord, ReleaseLeaseRecord
 from onebridge.deployment_switch import DeploymentSwitchService
 from onebridge.release_operator import ProductionReleaseOperator
 
@@ -131,3 +132,48 @@ def test_fresh_release_lease_blocks_second_release_without_consuming_approval(
     assert operator.approval(
         approval["approval_id"]
     )["consumed_at"] is None
+
+
+def test_approval_expires_fail_closed(tmp_path: Path):
+    db, controller, _ = build(tmp_path)
+    operator = ProductionReleaseOperator(
+        db,
+        controller,
+        approval_max_age_seconds=60,
+    )
+    plan = operator.plan("green", ["flowise"])
+    approval = operator.approve(plan, actor="release-manager")
+
+    with db.Session() as session:
+        row = session.get(
+            ReleaseApprovalRecord,
+            approval["approval_id"],
+        )
+        row.created_at = (
+            datetime.now(timezone.utc) - timedelta(minutes=10)
+        )
+        session.commit()
+
+    with pytest.raises(ValueError, match="expired"):
+        operator.execute(approval["approval_id"])
+    assert controller.calls == []
+
+
+def test_approval_binds_target_endpoint_even_when_version_is_same(
+    tmp_path: Path,
+):
+    db, controller, _ = build(tmp_path)
+    operator = ProductionReleaseOperator(db, controller)
+    plan = operator.plan("green", ["flowise"])
+    approval = operator.approve(plan, actor="release-manager")
+
+    controller.deployments.register(
+        "openclaw",
+        "green",
+        endpoint="http://127.0.0.1:4112/health",
+        version="2026.9.6",
+    )
+
+    with pytest.raises(ValueError, match="stale"):
+        operator.execute(approval["approval_id"])
+    assert controller.calls == []
