@@ -266,13 +266,8 @@ GET /api/v1/deployments/openclaw/history
 
 ## Production release operator
 
-`onebridge-release` provides plan, approve, execute, status, and reconcile
-commands around the guarded production release controller. Approvals are
-single-use, expire fail-closed, bind the exact deployment/adapter topology, and
-a database lease prevents concurrent OpenClaw release operations.
+`onebridge-release` provides readiness, plan, request, second-person approval, execute, revoke, status, and reconcile commands around the guarded production release controller. Production requests are persisted, approvals are single-use and expire fail-closed, requester and approver identities are separated, the exact deployment/adapter topology is fingerprinted, and a database lease prevents concurrent OpenClaw release operations.
 
-Set `ONEBRIDGE_RELEASE_CONTROLLER_REQUIRED=true` to block direct HTTP
-promotion and require the release-controller path. External OpenClaw actuation
-also enables this protection automatically.
+Set `ONEBRIDGE_RELEASE_CONTROLLER_REQUIRED=true` and `ONEBRIDGE_RELEASE_TWO_PERSON_REQUIRED=true` for the strict production path. External OpenClaw actuation also forces the guarded release path. Database startup now runs versioned forward migrations; inspect them with `onebridge schema-status` and apply them explicitly with `onebridge migrate-db`.
 
 See `docs/RELEASE_OPERATOR.md`.
