@@ -109,9 +109,11 @@ def evaluate_production_readiness(
         "production releases require requester/approver separation",
     )
 
-    admin_count = len(
-        tuple(settings.release_admin_workspaces)
-    )
+    admin_count = len({
+        str(value).strip()
+        for value in settings.release_admin_workspaces
+        if str(value).strip()
+    })
     add(
         "release.admins",
         admin_count >= 2,
