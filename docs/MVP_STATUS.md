@@ -20,7 +20,7 @@ This file maps the original OneBridge backlog to the current repository.
 | OB-014 Compatibility Matrix | Implemented foundation | persistent candidate/active/blocked registry + stored qualification evidence + atomic multi-adapter release promotion |
 | OB-015 OpenTelemetry | Implemented foundation | optional OTLP/HTTP traces + metrics for task lifecycle and adapter execution |
 | OB-016 Notices/SBOM | Implemented foundation | notices/provenance docs + security workflow + CycloneDX SBOM artifact + secret scan |
-| OB-017 Blue/Green OpenClaw | Implemented foundation | persistent blue/green slots + bounded health evidence + signed idempotent external actuator + actuation journal + promote/rollback API |
+| OB-017 Blue/Green OpenClaw | Implemented foundation | blue/green registry + signed external switching + guarded release controller + approval fingerprint + single-flight lease + smoke rollback/reconcile |
 | OB-018 Tenant / identity | Implemented foundation | workspace/API-key store + optional bearer auth + tenant-scoped task isolation; RBAC/SSO pending |
 | OB-019 ContextForge | Implemented foundation | explicit knowledge scopes + bounded SHA-256 de-duplicated context selection + provider plugin entry points |
 | OB-020 Adapter marketplace/SDK | Implemented foundation | explicit Python entry-point discovery/loading + plugin contexts + configurable output routing; marketplace UI/distribution pending |
@@ -31,6 +31,6 @@ The next high-value work is to replace mocks with real adapters while preserving
 
 1. Run the implemented `onebridge qualify` harness against pinned Flowise, Open Design, and Hermes deployments.
 2. Run live qualification and promote pinned real adapter versions to active.
-3. Point the implemented signed OpenClaw actuator at the real deployment/load-balancer controller and validate the native plugin on both slots.
+3. Exercise the approval-gated production release operator against real blue/green OpenClaw slots, including stable-path smoke and reconcile.
 4. Exercise the verified LINE webhook/push path against a real LINE Official Account.
 5. Qualify ContextForge providers and adapter SDK packages, then add marketplace/distribution metadata.
