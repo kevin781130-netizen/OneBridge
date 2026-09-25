@@ -97,3 +97,27 @@ def test_global_release_mutations_require_release_admin(tmp_path: Path):
         },
     )
     assert deployment_denied.status_code == 403
+
+
+def test_release_admin_gate_protects_global_release_visibility(tmp_path: Path):
+    settings = make_settings(tmp_path, ("ws_release",))
+    admin_key = key_for(settings, "ws_release")
+    tenant_key = key_for(settings, "ws_tenant")
+    client = TestClient(create_app(settings))
+
+    denied = client.get(
+        "/api/v1/compatibility",
+        headers={"Authorization": f"Bearer {tenant_key}"},
+    )
+    allowed = client.get(
+        "/api/v1/compatibility",
+        headers={"Authorization": f"Bearer {admin_key}"},
+    )
+    deployments = client.get(
+        "/api/v1/deployments/openclaw",
+        headers={"Authorization": f"Bearer {tenant_key}"},
+    )
+
+    assert denied.status_code == 403
+    assert allowed.status_code == 200
+    assert deployments.status_code == 403
