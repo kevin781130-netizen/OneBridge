@@ -265,7 +265,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/v1/adapters/{adapter_id}/compatibility/candidate")
     def register_adapter_candidate(
         adapter_id: str,
-        auth: AuthContext | None = Depends(current_auth),
+        auth: AuthContext | None = Depends(current_release_auth),
     ) -> dict:
         try:
             status = compatibility.register_current(adapter_id)
@@ -278,7 +278,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/v1/adapters/{adapter_id}/qualify")
     def qualify_adapter_endpoint(
         adapter_id: str,
-        auth: AuthContext | None = Depends(current_auth),
+        auth: AuthContext | None = Depends(current_release_auth),
     ) -> dict:
         try:
             result = compatibility.qualify_current(adapter_id)
@@ -292,7 +292,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def promote_adapter(
         adapter_id: str,
         version: str,
-        auth: AuthContext | None = Depends(current_auth),
+        auth: AuthContext | None = Depends(current_release_auth),
     ) -> dict:
         if (
             settings.release_controller_required
@@ -318,7 +318,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         adapter_id: str,
         version: str,
         payload: dict | None = None,
-        auth: AuthContext | None = Depends(current_auth),
+        auth: AuthContext | None = Depends(current_release_auth),
     ) -> dict:
         notes = str((payload or {}).get("notes") or "")[:2000]
         try:
@@ -366,7 +366,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def register_openclaw_deployment(
         slot: str,
         payload: dict,
-        auth: AuthContext | None = Depends(current_auth),
+        auth: AuthContext | None = Depends(current_release_auth),
     ) -> dict:
         try:
             status = deployments.register(
@@ -397,7 +397,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/v1/deployments/openclaw/{slot}/probe")
     def probe_openclaw_deployment(
         slot: str,
-        auth: AuthContext | None = Depends(current_auth),
+        auth: AuthContext | None = Depends(current_release_auth),
     ) -> dict:
         try:
             status = deployments.probe("openclaw", slot)
@@ -413,7 +413,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/v1/deployments/openclaw/{slot}/promote")
     def promote_openclaw_deployment(
         slot: str,
-        auth: AuthContext | None = Depends(current_auth),
+        auth: AuthContext | None = Depends(current_release_auth),
     ) -> dict:
         if (
             settings.release_controller_required
@@ -459,7 +459,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/v1/deployments/openclaw/actions/rollback")
     def rollback_openclaw_deployment(
-        auth: AuthContext | None = Depends(current_auth),
+        auth: AuthContext | None = Depends(current_release_auth),
     ) -> dict:
         try:
             status = deployments.rollback("openclaw")
