@@ -81,8 +81,25 @@ def migrate_database(
     """
 
     with engine.begin() as connection:
+        if engine.dialect.name == "postgresql":
+            connection.execute(
+                text(
+                    "SELECT pg_advisory_xact_lock(:lock_key)"
+                ),
+                {"lock_key": 1263421769},
+            )
+
         _ensure_history_table(connection)
         applied = set(_applied(connection))
+        unexpected = [
+            version
+            for version in applied
+            if version > SCHEMA_VERSION
+        ]
+        if unexpected:
+            raise RuntimeError(
+                "database schema is newer than this OneBridge build"
+            )
 
         if 1 not in applied:
             baseline_tables = [
@@ -116,16 +133,6 @@ def migrate_database(
                 "two_person_release_requests",
             )
             applied.add(2)
-
-        unexpected = [
-            version
-            for version in applied
-            if version > SCHEMA_VERSION
-        ]
-        if unexpected:
-            raise RuntimeError(
-                "database schema is newer than this OneBridge build"
-            )
 
         ordered = tuple(sorted(applied))
         current = ordered[-1] if ordered else 0
