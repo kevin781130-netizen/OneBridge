@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from onebridge.deployment_switch import DeploymentStatus, ProbeResult
 from onebridge.release_http import build_release_router
+from onebridge.production_readiness import ProductionReadinessReport, ReadinessCheck
 
 
 class Plan:
@@ -282,3 +283,41 @@ def test_release_request_and_second_person_approval_routes(monkeypatch):
     )
     assert history.status_code == 200
     assert history.json()[0]["request_id"] == "relreq_1"
+
+
+def test_execute_is_blocked_by_required_readiness_gate():
+    deployments = Deployments()
+
+    def auth():
+        return None
+
+    report = ProductionReadinessReport((
+        ReadinessCheck(
+            name="release.two_person",
+            passed=False,
+            detail="two-person approval required",
+        ),
+    ))
+    app = FastAPI()
+    app.include_router(build_release_router(
+        operator=Operator(),
+        controller=Controller(deployments),
+        deployments=deployments,
+        current_auth=auth,
+        readiness=lambda: report,
+        readiness_required=True,
+    ))
+    c = TestClient(app)
+
+    readiness = c.get(
+        "/api/v1/releases/production/readiness"
+    )
+    assert readiness.status_code == 200
+    assert readiness.json()["ready"] is False
+
+    executed = c.post(
+        "/api/v1/releases/production/execute",
+        json={"approval_id": "relapp_1"},
+    )
+    assert executed.status_code == 409
+    assert "release.two_person" in executed.json()["detail"]["failures"]
