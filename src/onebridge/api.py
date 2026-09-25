@@ -255,7 +255,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/compatibility")
     def compatibility_matrix(
-        auth: AuthContext | None = Depends(current_auth),
+        auth: AuthContext | None = Depends(current_release_auth),
     ) -> list[dict]:
         return [
             CompatibilityService.as_dict(item)
@@ -336,7 +336,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/deployments/openclaw")
     def openclaw_deployments(
-        auth: AuthContext | None = Depends(current_auth),
+        auth: AuthContext | None = Depends(current_release_auth),
     ) -> list[dict]:
         return [
             DeploymentSwitchService.as_dict(item)
@@ -345,7 +345,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/deployments/openclaw/active")
     def active_openclaw_deployment(
-        auth: AuthContext | None = Depends(current_auth),
+        auth: AuthContext | None = Depends(current_release_auth),
     ) -> dict:
         active = next(
             (
@@ -453,7 +453,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/deployments/openclaw/history")
     def openclaw_deployment_history(
-        auth: AuthContext | None = Depends(current_auth),
+        auth: AuthContext | None = Depends(current_release_auth),
     ) -> list[dict]:
         return deployments.actions("openclaw")
 
