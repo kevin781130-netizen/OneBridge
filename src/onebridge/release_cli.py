@@ -9,6 +9,7 @@ from .config import Settings
 from .deployment_actuator import HttpDeploymentActuator
 from .deployment_switch import DeploymentSwitchService, probe_deployment
 from .production_release import ProductionReleaseController
+from .production_readiness import evaluate_production_readiness
 from .release_operator import ProductionReleaseOperator
 from .runtime import build_runtime_service
 
@@ -116,6 +117,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     approve.add_argument("--reason", default="")
 
+    sub.add_parser("readiness")
+
     execute = sub.add_parser("execute")
     execute.add_argument("--approval-id", required=True)
     execute.add_argument(
@@ -214,7 +217,35 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, indent=2, sort_keys=True))
             return 0 if args.decision == "approve" else 3
 
+        if args.command == "readiness":
+            report = evaluate_production_readiness(
+                settings,
+                service.registry,
+            )
+            print(json.dumps(
+                report.to_dict(),
+                indent=2,
+                sort_keys=True,
+            ))
+            return 0 if report.ready else 7
+
         if args.command == "execute":
+            if settings.release_controller_required:
+                report = evaluate_production_readiness(
+                    settings,
+                    service.registry,
+                )
+                if not report.ready:
+                    print(json.dumps(
+                        {
+                            "status": "rejected",
+                            "error": "production readiness gate failed",
+                            "failures": list(report.failures),
+                        },
+                        indent=2,
+                        sort_keys=True,
+                    ))
+                    return 7
             result = operator.execute(
                 args.approval_id,
                 owner=args.owner,
