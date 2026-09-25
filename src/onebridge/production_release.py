@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from .compatibility_service import CompatibilityService
 from .db import Database, ProductionReleaseRecord
-from .deployment_switch import DeploymentSwitchService, probe_deployment
+from .deployment_switch import DeploymentSwitchService, probe_deployment, validate_probe_url
 from .redaction import redact_text
 from .release_pipeline import AdapterReleasePipeline
 
@@ -26,7 +26,12 @@ class ProductionReleaseController:
         self.db = db
         self.compatibility = compatibility
         self.deployments = deployments
-        self.smoke_url = str(smoke_url or "").strip() or None
+        smoke_value = str(smoke_url or "").strip()
+        self.smoke_url = (
+            validate_probe_url(smoke_value)
+            if smoke_value
+            else None
+        )
         self.timeout_seconds = max(1.0, min(float(timeout_seconds), 20.0))
         self.smoke_probe = smoke_probe
 
