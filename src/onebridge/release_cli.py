@@ -63,6 +63,7 @@ def _build(settings: Settings):
         controller,
         lease_max_age_seconds=settings.release_lease_ttl_seconds,
         approval_max_age_seconds=settings.release_approval_ttl_seconds,
+        two_person_required=settings.release_two_person_required,
     )
     return service, deployments, controller, operator
 
