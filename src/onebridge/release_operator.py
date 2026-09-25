@@ -290,12 +290,13 @@ class ProductionReleaseOperator:
                     "only an approved release can be revoked"
                 )
             row.decision = "revoked"
-            row.actor = redact_text(actor_value)[:200]
             row.reason = redact_text(
                 str(reason or "revoked by operator")
             )[:4000]
             session.commit()
-        return self.approval(approval_id)
+        result = self.approval(approval_id)
+        result["revoked_by"] = redact_text(actor_value)[:200]
+        return result
 
     def approvals(self, *, limit: int = 50) -> list[dict]:
         from sqlalchemy import select
