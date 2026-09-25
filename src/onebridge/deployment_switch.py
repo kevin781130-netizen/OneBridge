@@ -105,6 +105,10 @@ def _validate_probe_url(value: str) -> str:
     return raw
 
 
+def validate_probe_url(value: str) -> str:
+    return _validate_probe_url(value)
+
+
 def probe_deployment(
     endpoint: str,
     *,
