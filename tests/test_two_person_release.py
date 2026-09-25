@@ -141,3 +141,28 @@ def test_direct_approval_is_disabled_when_two_person_is_required(
             plan,
             actor="approver",
         )
+
+
+def test_release_request_can_only_be_decided_once(tmp_path: Path):
+    operator, _ = build(tmp_path)
+    plan = operator.plan("green", ["flowise"])
+    request_value = operator.request(
+        plan,
+        actor="requester",
+    )
+
+    first = operator.approve_request(
+        request_value["request_id"],
+        actor="approver-a",
+    )
+    assert first["decision"] == "approve"
+
+    with pytest.raises(ValueError, match="not pending"):
+        operator.approve_request(
+            request_value["request_id"],
+            actor="approver-b",
+        )
+
+    approvals = operator.approvals()
+    assert len(approvals) == 1
+    assert approvals[0]["approval_id"] == first["approval_id"]
