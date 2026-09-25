@@ -47,6 +47,7 @@ The control plane exposes:
 ```text
 POST /api/v1/releases/production/plan
 POST /api/v1/releases/production/approve
+GET  /api/v1/releases/production/approvals/{approval_id}
 POST /api/v1/releases/production/execute
 GET  /api/v1/releases/production
 GET  /api/v1/releases/production/status
