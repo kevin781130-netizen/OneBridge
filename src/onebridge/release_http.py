@@ -116,6 +116,12 @@ def build_release_router(
             )
         return result
 
+    @router.get("/approvals")
+    def list_approvals(
+        auth=Depends(current_auth),
+    ) -> list[dict]:
+        return operator.approvals()
+
     @router.get("/approvals/{approval_id}")
     def approval_status(
         approval_id: str,
@@ -128,6 +134,39 @@ def build_release_router(
                 status_code=404,
                 detail="release approval not found",
             ) from exc
+
+    @router.post("/approvals/{approval_id}/revoke")
+    def revoke_approval(
+        approval_id: str,
+        payload: dict,
+        auth=Depends(current_auth),
+    ) -> dict:
+        try:
+            result = operator.revoke(
+                approval_id,
+                actor=actor(auth, payload),
+                reason=str(payload.get("reason") or ""),
+            )
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="release approval not found",
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=str(exc),
+            ) from exc
+        if audit is not None:
+            audit.append(
+                "production_release.approval_revoked",
+                actor=result["actor"],
+                payload={
+                    "approval_id": result["approval_id"],
+                    "target_slot": result["target_slot"],
+                },
+            )
+        return result
 
     @router.post("/execute")
     def execute_release(
@@ -191,6 +230,7 @@ def build_release_router(
     ) -> dict:
         return {
             "lease": operator.lease(),
+            "approvals": operator.approvals(),
             "releases": controller.list(),
             "deployment_actions": deployments.actions(
                 "openclaw"
