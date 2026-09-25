@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from sqlalchemy import create_engine, inspect, text
 
 from onebridge.db import Database
@@ -46,3 +48,32 @@ def test_migration_adopts_existing_unversioned_database(tmp_path: Path):
         "release_requests",
         "schema_migrations",
     }
+
+
+def test_newer_database_schema_is_rejected_before_downgrade(tmp_path: Path):
+    path = tmp_path / "future.db"
+    url = f"sqlite:///{path}"
+    engine = create_engine(url, future=True)
+    with engine.begin() as connection:
+        connection.execute(text(
+            "CREATE TABLE schema_migrations ("
+            "version INTEGER PRIMARY KEY, "
+            "name VARCHAR(200) NOT NULL, "
+            "applied_at VARCHAR(64) NOT NULL"
+            ")"
+        ))
+        connection.execute(
+            text(
+                "INSERT INTO schema_migrations"
+                "(version,name,applied_at) "
+                "VALUES(99,'future','future')"
+            )
+        )
+
+    db = Database(url)
+    with pytest.raises(RuntimeError, match="newer"):
+        db.migrate()
+
+    assert "release_requests" not in set(
+        inspect(db.engine).get_table_names()
+    )
