@@ -42,6 +42,8 @@ class ProbeResult:
     content_type: str
     body_sha256: str
     reported_ok: bool | None
+    reported_active_slot: str | None = None
+    reported_version: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -149,13 +151,20 @@ def probe_deployment(
         response.close()
 
     reported_ok: bool | None = None
+    reported_active_slot: str | None = None
+    reported_version: str | None = None
     if body and "json" in content_type.lower():
         try:
             payload = json.loads(body.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
             payload = None
-        if isinstance(payload, dict) and isinstance(payload.get("ok"), bool):
-            reported_ok = payload["ok"]
+        if isinstance(payload, dict):
+            if isinstance(payload.get("ok"), bool):
+                reported_ok = payload["ok"]
+            if isinstance(payload.get("active_slot"), str):
+                reported_active_slot = payload["active_slot"][:40]
+            if isinstance(payload.get("version"), str):
+                reported_version = payload["version"][:120]
 
     healthy = 200 <= status < 300 and reported_ok is not False
     return ProbeResult(
@@ -165,6 +174,8 @@ def probe_deployment(
         content_type=content_type,
         body_sha256=hashlib.sha256(body).hexdigest(),
         reported_ok=reported_ok,
+        reported_active_slot=reported_active_slot,
+        reported_version=reported_version,
     )
 
 
