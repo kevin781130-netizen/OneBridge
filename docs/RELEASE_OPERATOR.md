@@ -91,3 +91,9 @@ A valid tenant API key that is not in this allowlist receives HTTP 403 for the
 release operator API. An empty allowlist also returns 403. This is intentionally
 separate from normal task tenant isolation while broader RBAC/SSO remains a
 future layer.
+
+
+Release-admin authorization is also applied to global release mutations such as
+adapter qualification/block/promotion and OpenClaw candidate/probe/promotion/
+rollback operations. Normal tenant keys can continue to use tenant-scoped task
+APIs but cannot mutate global production-release state.
