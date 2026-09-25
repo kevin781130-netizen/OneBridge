@@ -69,6 +69,9 @@ class Settings:
         "ONEBRIDGE_RELEASE_CONTROLLER_REQUIRED",
         False,
     )
+    release_admin_workspaces: tuple[str, ...] = _env_csv(
+        "ONEBRIDGE_RELEASE_ADMIN_WORKSPACES"
+    )
     release_approval_ttl_seconds: float = float(
         os.getenv("ONEBRIDGE_RELEASE_APPROVAL_TTL_SECONDS", "1800")
     )
