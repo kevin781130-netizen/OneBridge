@@ -21,6 +21,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="onebridge")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init-db")
+    sub.add_parser("migrate-db")
+    sub.add_parser("schema-status")
     serve = sub.add_parser("serve")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
@@ -56,9 +58,21 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "init-db":
         settings = Settings()
-        Database(settings.database_url).create_all()
-        print("OneBridge database initialized")
+        status = Database(settings.database_url).migrate()
+        print(json.dumps(status.to_dict(), indent=2, sort_keys=True))
         return 0
+
+    if args.command == "migrate-db":
+        settings = Settings()
+        status = Database(settings.database_url).migrate()
+        print(json.dumps(status.to_dict(), indent=2, sort_keys=True))
+        return 0
+
+    if args.command == "schema-status":
+        settings = Settings()
+        status = Database(settings.database_url).schema_status()
+        print(json.dumps(status.to_dict(), indent=2, sort_keys=True))
+        return 0 if status.up_to_date else 8
 
     if args.command == "serve":
         import uvicorn
