@@ -12,6 +12,8 @@ def build_release_router(
     deployments: DeploymentSwitchService,
     current_auth,
     audit=None,
+    readiness=None,
+    readiness_required: bool = False,
 ) -> APIRouter:
     router = APIRouter(
         prefix="/api/v1/releases/production",
@@ -276,6 +278,22 @@ def build_release_router(
             )
         return result
 
+    @router.get("/readiness")
+    def release_readiness(
+        auth=Depends(current_auth),
+    ) -> dict:
+        if readiness is None:
+            return {
+                "ready": not readiness_required,
+                "failures": (
+                    []
+                    if not readiness_required
+                    else ["readiness.unavailable"]
+                ),
+                "checks": [],
+            }
+        return readiness().to_dict()
+
     @router.post("/execute")
     def execute_release(
         payload: dict,
@@ -294,6 +312,21 @@ def build_release_router(
             if auth is not None
             else str(payload.get("owner") or "local-operator")
         )
+        if readiness_required:
+            if readiness is None:
+                raise HTTPException(
+                    status_code=503,
+                    detail="production readiness gate is unavailable",
+                )
+            report = readiness()
+            if not report.ready:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "message": "production readiness gate failed",
+                        "failures": list(report.failures),
+                    },
+                )
         try:
             result = operator.execute(
                 approval_id,
