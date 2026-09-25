@@ -15,6 +15,7 @@ from .db import (
     utcnow,
 )
 from .production_release import ProductionReleaseController
+from .redaction import redact_text
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,8 +222,8 @@ class ProductionReleaseOperator:
                         sort_keys=True,
                     ),
                     decision=decision,
-                    actor=actor_value[:200],
-                    reason=str(reason or "")[:4000],
+                    actor=redact_text(actor_value)[:200],
+                    reason=redact_text(str(reason or ""))[:4000],
                 )
             )
             session.commit()
@@ -289,8 +290,10 @@ class ProductionReleaseOperator:
                     "only an approved release can be revoked"
                 )
             row.decision = "revoked"
-            row.actor = actor_value[:200]
-            row.reason = str(reason or "revoked by operator")[:4000]
+            row.actor = redact_text(actor_value)[:200]
+            row.reason = redact_text(
+                str(reason or "revoked by operator")
+            )[:4000]
             session.commit()
         return self.approval(approval_id)
 
