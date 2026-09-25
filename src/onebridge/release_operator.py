@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from sqlalchemy.exc import IntegrityError
@@ -446,9 +446,17 @@ class ProductionReleaseOperator:
             row = session.get(ReleaseLeaseRecord, "openclaw")
             if row is None:
                 return None
+            acquired = row.acquired_at
+            if acquired.tzinfo is None:
+                acquired = acquired.replace(tzinfo=timezone.utc)
+            expires = acquired + timedelta(
+                seconds=self.lease_max_age_seconds
+            )
             return {
                 "service": row.service,
                 "release_id": row.release_id,
                 "owner": row.owner,
-                "acquired_at": row.acquired_at.isoformat(),
+                "acquired_at": acquired.isoformat(),
+                "expires_at": expires.isoformat(),
+                "expired": datetime.now(timezone.utc) > expires,
             }
