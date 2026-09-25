@@ -116,6 +116,19 @@ def build_release_router(
             )
         return result
 
+    @router.get("/approvals/{approval_id}")
+    def approval_status(
+        approval_id: str,
+        auth=Depends(current_auth),
+    ) -> dict:
+        try:
+            return operator.approval(approval_id)
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="release approval not found",
+            ) from exc
+
     @router.post("/execute")
     def execute_release(
         payload: dict,
