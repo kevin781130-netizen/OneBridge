@@ -272,7 +272,17 @@ class Database:
         self.Session = sessionmaker(self.engine, expire_on_commit=False, class_=Session)
 
     def create_all(self) -> None:
-        Base.metadata.create_all(self.engine)
+        self.migrate()
+
+    def migrate(self):
+        from .migrations import migrate_database
+
+        return migrate_database(self.engine, Base.metadata)
+
+    def schema_status(self):
+        from .migrations import schema_status
+
+        return schema_status(self.engine)
 
     def session(self) -> Iterator[Session]:
         with self.Session() as session:
