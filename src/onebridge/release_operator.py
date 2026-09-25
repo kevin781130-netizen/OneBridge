@@ -687,6 +687,20 @@ class ProductionReleaseOperator:
                 result = self.controller.run(
                     current.target_slot,
                     [name for name, _ in current.adapters],
+                    governance={
+                        "approval_id": approval_id,
+                        "request_id": approval.get(
+                            "request_id"
+                        ),
+                        "requested_by": approval.get(
+                            "requested_by"
+                        ),
+                        "approved_by": approval["actor"],
+                        "executed_by": redact_text(
+                            str(owner or "operator")
+                        )[:200],
+                        "plan_fingerprint": current.fingerprint,
+                    },
                 )
             except Exception:
                 self._set_request_status(
