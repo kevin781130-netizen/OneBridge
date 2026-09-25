@@ -86,3 +86,19 @@ def test_failed_qualification_blocks_candidate(tmp_path: Path):
 
     with pytest.raises(ValueError):
         service.promote("flowise", "real-2")
+
+
+def test_blocked_adapter_requires_explicit_candidate_reset(tmp_path: Path):
+    registry = AdapterRegistry()
+    registry.register(QualifiedAdapter())
+    service = CompatibilityService(database(tmp_path), registry)
+
+    service.register_current("flowise")
+    service.block("flowise", "real-1", notes="operator hold")
+
+    with pytest.raises(ValueError, match="explicit candidate"):
+        service.qualify_current("flowise")
+
+    reset = service.register_current("flowise", state="candidate")
+    assert reset.state == "candidate"
+    assert service.qualify_current("flowise").passed is True
