@@ -179,3 +179,22 @@ def test_approval_binds_target_endpoint_even_when_version_is_same(
     with pytest.raises(ValueError, match="stale"):
         operator.execute(approval["approval_id"])
     assert controller.calls == []
+
+
+def test_approved_release_can_be_revoked_before_execution(tmp_path: Path):
+    db, controller, _ = build(tmp_path)
+    operator = ProductionReleaseOperator(db, controller)
+    plan = operator.plan("green", ["flowise"])
+    approval = operator.approve(plan, actor="release-manager")
+
+    revoked = operator.revoke(
+        approval["approval_id"],
+        actor="release-manager",
+        reason="hold release",
+    )
+    assert revoked["decision"] == "revoked"
+    assert operator.approvals()[0]["decision"] == "revoked"
+
+    with pytest.raises(ValueError, match="not approved"):
+        operator.execute(approval["approval_id"])
+    assert controller.calls == []
