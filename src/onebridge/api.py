@@ -22,6 +22,9 @@ from .identity import IdentityStore
 from .line_messaging import LineMessagingClient, LineMessagingError, LineWebhookController
 from .line_progress import map_task_progress
 from .preview import load_artifact_preview
+from .production_release import ProductionReleaseController
+from .release_http import build_release_router
+from .release_operator import ProductionReleaseOperator
 from .release_gate import evaluate_release_gate
 from .review import compare_artifacts
 from .review_portal import render_review_portal
@@ -103,6 +106,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         actuator=openclaw_actuator,
         health_max_age_seconds=settings.openclaw_health_max_age_seconds,
     )
+    production_controller = ProductionReleaseController(
+        service.db,
+        compatibility,
+        deployments,
+        smoke_url=settings.openclaw_smoke_url,
+        timeout_seconds=settings.openclaw_smoke_timeout_seconds,
+    )
+    production_operator = ProductionReleaseOperator(
+        service.db,
+        production_controller,
+    )
     task_scheduler = None
     if settings.task_queue_url:
         task_scheduler = TaskScheduler(
@@ -154,6 +168,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             project = session.get(ProjectRecord, task.project_id)
             if project is None or project.tenant_id != auth.workspace_id:
                 raise HTTPException(status_code=404, detail="task not found")
+
+    app.include_router(
+        build_release_router(
+            operator=production_operator,
+            controller=production_controller,
+            deployments=deployments,
+            current_auth=current_auth,
+            audit=getattr(service, "audit", None),
+        )
+    )
 
     @app.get("/review/{task_id}", response_class=HTMLResponse)
     def review_portal(task_id: str) -> HTMLResponse:
