@@ -31,6 +31,17 @@ class Adapter:
 class Compatibility:
     def __init__(self, registry):
         self.registry = registry
+        self.states = {}
+
+    def get(self, adapter_id, version):
+        key = (adapter_id, version)
+        if key not in self.states:
+            raise KeyError(key)
+
+        class Status:
+            state = self.states[key]
+
+        return Status()
 
 
 class Controller:
@@ -228,3 +239,12 @@ def test_expired_release_lease_is_reclaimed(tmp_path: Path):
     result = operator.execute(approval["approval_id"])
     assert result["status"] == "succeeded"
     assert operator.lease() is None
+
+
+def test_blocked_adapter_cannot_enter_release_plan(tmp_path: Path):
+    _, controller, _ = build(tmp_path)
+    controller.compatibility.states[("flowise", "1.0")] = "blocked"
+    operator = ProductionReleaseOperator(controller.deployments.db, controller)
+
+    with pytest.raises(ValueError, match="blocked adapter"):
+        operator.plan("green", ["flowise"])
