@@ -88,6 +88,14 @@ class ProductionReleaseController:
         if not requested:
             raise ValueError("empty adapter release set")
 
+        if (
+            self.deployments.actuator is not None
+            and self.smoke_url is None
+        ):
+            raise ValueError(
+                "external deployment actuation requires an OpenClaw smoke URL"
+            )
+
         target = self.deployments.get("openclaw", target_slot)
         previous = self._active()
         if previous is not None and previous.slot == target.slot:
