@@ -61,6 +61,8 @@ def _build(settings: Settings):
     operator = ProductionReleaseOperator(
         service.db,
         controller,
+        lease_max_age_seconds=settings.release_lease_ttl_seconds,
+        approval_max_age_seconds=settings.release_approval_ttl_seconds,
     )
     return service, deployments, controller, operator
 
