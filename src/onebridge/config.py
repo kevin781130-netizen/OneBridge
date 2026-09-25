@@ -69,6 +69,10 @@ class Settings:
         "ONEBRIDGE_RELEASE_CONTROLLER_REQUIRED",
         False,
     )
+    release_two_person_required: bool = _env_bool(
+        "ONEBRIDGE_RELEASE_TWO_PERSON_REQUIRED",
+        False,
+    )
     release_admin_workspaces: tuple[str, ...] = _env_csv(
         "ONEBRIDGE_RELEASE_ADMIN_WORKSPACES"
     )
