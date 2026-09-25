@@ -200,13 +200,19 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "reconcile":
-            smoke_url = (
-                str(args.smoke_url or "").strip()
-                or settings.openclaw_smoke_url
-            )
+            smoke_url = str(
+                settings.openclaw_smoke_url or ""
+            ).strip()
             if not smoke_url:
                 raise ValueError(
-                    "reconcile requires a stable smoke URL"
+                    "reconcile requires the configured stable smoke URL"
+                )
+            requested_url = str(
+                args.smoke_url or ""
+            ).strip()
+            if requested_url and requested_url != smoke_url:
+                raise ValueError(
+                    "reconcile smoke URL must match configured stable path"
                 )
             observed = probe_deployment(
                 smoke_url,
