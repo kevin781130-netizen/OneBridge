@@ -21,6 +21,51 @@ class Operator:
     def plan(self, slot, adapters):
         return Plan()
 
+    def request(self, plan, *, actor, reason):
+        return {
+            "request_id": "relreq_1",
+            "service": "openclaw",
+            "target_slot": "green",
+            "fingerprint": plan.fingerprint,
+            "requested_by": actor,
+            "reason": reason,
+            "status": "pending",
+            "plan": plan.to_dict(),
+        }
+
+    def request_status(self, request_id):
+        return {
+            "request_id": request_id,
+            "target_slot": "green",
+            "requested_by": "requester",
+            "status": "pending",
+        }
+
+    def requests(self):
+        return [self.request_status("relreq_1")]
+
+    def approve_request(
+        self,
+        request_id,
+        *,
+        actor,
+        decision,
+        reason,
+    ):
+        return {
+            "approval_id": "relapp_1",
+            "request_id": request_id,
+            "requested_by": "requester",
+            "service": "openclaw",
+            "target_slot": "green",
+            "fingerprint": "f" * 64,
+            "decision": decision,
+            "actor": actor,
+            "reason": reason,
+            "consumed_at": None,
+            "created_at": "2026-09-25T00:00:00+00:00",
+        }
+
     def approve(self, plan, *, actor, decision, reason):
         return {
             "approval_id": "relapp_1",
@@ -206,3 +251,34 @@ def test_release_approval_history_and_revoke(monkeypatch):
     )
     assert revoked.status_code == 200
     assert revoked.json()["decision"] == "revoked"
+
+
+def test_release_request_and_second_person_approval_routes(monkeypatch):
+    c, _ = client(monkeypatch)
+
+    requested = c.post(
+        "/api/v1/releases/production/requests",
+        json={
+            "target_slot": "green",
+            "actor": "requester",
+        },
+    )
+    assert requested.status_code == 200
+    assert requested.json()["request_id"] == "relreq_1"
+
+    approved = c.post(
+        "/api/v1/releases/production/requests/relreq_1/approve",
+        json={
+            "actor": "approver",
+            "decision": "approve",
+        },
+    )
+    assert approved.status_code == 200
+    assert approved.json()["requested_by"] == "requester"
+    assert approved.json()["actor"] == "approver"
+
+    history = c.get(
+        "/api/v1/releases/production/requests"
+    )
+    assert history.status_code == 200
+    assert history.json()[0]["request_id"] == "relreq_1"
