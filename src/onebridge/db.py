@@ -239,6 +239,32 @@ class ReleaseApprovalRecord(Base):
     )
 
 
+class ReleaseRequestRecord(Base):
+    __tablename__ = "release_requests"
+
+    id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    service: Mapped[str] = mapped_column(String(100), index=True)
+    target_slot: Mapped[str] = mapped_column(String(40), index=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    plan_json: Mapped[str] = mapped_column(Text)
+    requested_by: Mapped[str] = mapped_column(String(200), index=True)
+    reason: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(
+        String(24),
+        default="pending",
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+    )
+
+
 class Database:
     def __init__(self, url: str) -> None:
         connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
