@@ -15,10 +15,7 @@ current active slot/version, adapter versions, stable smoke URL and whether an
 external switching hook is enabled. If any of these change after approval,
 execution fails closed as stale.
 
-Approvals expire after 30 minutes by default inside the operator and are
-single-use. A database lease allows only one OpenClaw release operation at a
-time. A crashed lease can be reclaimed after the lease window, but a consumed
-approval is never silently reused.
+Approvals expire after 30 minutes by default and are single-use. A database lease allows only one OpenClaw release operation at a time. A crashed lease can be reclaimed after the lease window, but a consumed approval is never silently reused. Configure the windows with `ONEBRIDGE_RELEASE_APPROVAL_TTL_SECONDS` and `ONEBRIDGE_RELEASE_LEASE_TTL_SECONDS`.
 
 ## CLI
 
