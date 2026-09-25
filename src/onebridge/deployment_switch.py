@@ -601,6 +601,94 @@ class DeploymentSwitchService:
                     session.commit()
         return self.get(service, standby_status.slot)
 
+    def reconcile(
+        self,
+        service: str,
+        *,
+        observed_slot: str,
+        observed_version: str | None = None,
+    ) -> DeploymentStatus:
+        slot_name = self._slot(observed_slot)
+        with self.db.Session() as session:
+            action = session.scalar(
+                select(DeploymentActionRecord)
+                .where(
+                    DeploymentActionRecord.service == service,
+                    DeploymentActionRecord.status == "reconcile_required",
+                )
+                .order_by(DeploymentActionRecord.updated_at.desc())
+                .limit(1)
+            )
+            if action is None:
+                raise ValueError("no deployment reconciliation is pending")
+            if slot_name not in {
+                action.from_slot,
+                action.to_slot,
+            }:
+                raise ValueError(
+                    "observed slot does not match pending deployment action"
+                )
+
+            target = session.scalar(
+                select(DeploymentRecord).where(
+                    DeploymentRecord.service == service,
+                    DeploymentRecord.slot == slot_name,
+                )
+            )
+            if target is None:
+                raise KeyError((service, slot_name))
+            if (
+                observed_version is not None
+                and str(observed_version)
+                and target.version != str(observed_version)
+            ):
+                raise ValueError(
+                    "observed deployment version does not match registry"
+                )
+
+            rows = list(
+                session.scalars(
+                    select(DeploymentRecord).where(
+                        DeploymentRecord.service == service
+                    )
+                )
+            )
+            for row in rows:
+                if row.slot == slot_name:
+                    row.state = "active"
+                    row.promoted_at = utcnow()
+                elif row.state == "active":
+                    row.state = "standby"
+
+            try:
+                evidence = json.loads(
+                    action.evidence_json or "{}"
+                )
+            except json.JSONDecodeError:
+                evidence = {}
+            if not isinstance(evidence, dict):
+                evidence = {}
+            evidence["reconciliation"] = {
+                "observed_slot": slot_name,
+                "observed_version": (
+                    str(observed_version)
+                    if observed_version is not None
+                    else target.version
+                ),
+                "reconciled_at": datetime.now(
+                    timezone.utc
+                ).isoformat(),
+            }
+            action.evidence_json = json.dumps(
+                evidence,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+            action.status = "reconciled"
+            action.error = None
+            session.commit()
+            return self._status(target)
+
     def actions(
         self,
         service: str,
