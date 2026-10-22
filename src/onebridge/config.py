@@ -140,6 +140,9 @@ class Settings:
     feedback_desk_token: str | None = os.getenv(
         "ONEBRIDGE_FEEDBACK_DESK_TOKEN"
     )
+    feedback_desk_allowed_workspaces: tuple[str, ...] = _env_csv(
+        "ONEBRIDGE_FEEDBACK_DESK_ALLOWED_WORKSPACES"
+    )
     feedback_desk_timeout_seconds: float = float(
         os.getenv("ONEBRIDGE_FEEDBACK_DESK_TIMEOUT_SECONDS", "30")
     )
