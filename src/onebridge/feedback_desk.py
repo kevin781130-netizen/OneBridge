@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 from typing import Any, Iterable
+from urllib.parse import urlsplit
 
+from onebridge.config import Settings
 from onebridge.contracts import TaskContract
 from onebridge.mcp_http import McpHttpClient
+from onebridge.network_policy import EgressPolicy, EgressRule
 
 
 MAX_REPORT_TITLE = 500
@@ -281,3 +284,76 @@ class FeedbackDeskReadOnlyAdapter:
                 },
             }
         )
+
+
+def build_feedback_desk_adapter(
+    settings: Settings,
+) -> FeedbackDeskReadOnlyAdapter | None:
+    """Build the optional integration from environment-backed settings.
+
+    Remote MCP connections are HTTPS-only and restricted to the configured host
+    and /mcp path. Plain HTTP is delegated to McpHttpClient's loopback-only guard.
+    Partial configuration and invalid output kinds fail closed at startup.
+    """
+    configured = (
+        settings.feedback_desk_mcp_url,
+        settings.feedback_desk_project_slug,
+        settings.feedback_desk_token,
+    )
+    if not any(configured):
+        return None
+    if not all(configured):
+        raise ValueError(
+            "Feedback Desk requires ONEBRIDGE_FEEDBACK_DESK_MCP_URL, "
+            "ONEBRIDGE_FEEDBACK_DESK_PROJECT_SLUG and "
+            "ONEBRIDGE_FEEDBACK_DESK_TOKEN together"
+        )
+
+    url = str(settings.feedback_desk_mcp_url).strip()
+    token = str(settings.feedback_desk_token).strip()
+    project_slug = str(settings.feedback_desk_project_slug).strip()
+    parsed = urlsplit(url)
+    if (
+        parsed.scheme not in {"https", "http"}
+        or parsed.path != "/mcp"
+        or parsed.query
+        or parsed.fragment
+        or parsed.username
+        or parsed.password
+        or not parsed.hostname
+        or not token
+    ):
+        raise ValueError("ONEBRIDGE_FEEDBACK_DESK_MCP_URL must be an absolute /mcp URL")
+
+    allowed_outputs = {"content", "design", "code", "test_report", "release", "other"}
+    outputs = tuple(settings.feedback_desk_required_outputs)
+    if (
+        not outputs
+        or len(outputs) != len(set(outputs))
+        or any(output not in allowed_outputs for output in outputs)
+    ):
+        raise ValueError("ONEBRIDGE_FEEDBACK_DESK_REQUIRED_OUTPUTS contains invalid output kinds")
+
+    egress_policy = None
+    if parsed.scheme == "https":
+        egress_policy = EgressPolicy(
+            [
+                EgressRule(
+                    rule_id="feedback-desk-configured",
+                    host=parsed.hostname,
+                    path_prefix="/mcp",
+                    methods=("POST",),
+                )
+            ]
+        )
+
+    client = McpHttpClient(
+        url=url,
+        timeout_seconds=settings.feedback_desk_timeout_seconds,
+        egress_policy=egress_policy,
+        authorization=f"Bearer {token}",
+    )
+    return FeedbackDeskReadOnlyAdapter(
+        client=client,
+        project_slug=project_slug,
+    )
