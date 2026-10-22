@@ -18,7 +18,9 @@ from .db import Database, ProjectRecord, TaskRecord
 from .deployment_actuator import DeploymentActuatorError, HttpDeploymentActuator
 from .deployment_switch import DeploymentProbeError, DeploymentSwitchService
 from .durable_service import DurableOneBridgeService
+from .feedback_desk import FeedbackDeskIntegrationError, build_feedback_desk_adapter
 from .identity import IdentityStore
+from .mcp_http import McpHttpError
 from .line_messaging import LineMessagingClient, LineMessagingError, LineWebhookController
 from .line_progress import map_task_progress
 from .preview import load_artifact_preview
@@ -150,6 +152,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             task_scheduler=task_scheduler,
         )
 
+    feedback_desk = build_feedback_desk_adapter(settings)
+
     app = FastAPI(title="OneBridge Control Plane", version="0.1.0")
 
     def current_auth(
@@ -161,6 +165,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return authenticate_bearer(authorization, identities)
         except AuthenticationError as exc:
             raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+    def feedback_auth(
+        authorization: str | None = Header(default=None),
+    ) -> AuthContext:
+        # Feedback Desk routes always require authentication, even when the
+        # rest of the API is running in local development mode.
+        try:
+            auth = authenticate_bearer(authorization, identities)
+        except AuthenticationError as exc:
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
+        allowed = set(settings.feedback_desk_allowed_workspaces)
+        if not allowed:
+            raise HTTPException(
+                status_code=403,
+                detail="Feedback Desk workspace allowlist is not configured",
+            )
+        if auth.workspace_id not in allowed:
+            raise HTTPException(
+                status_code=403,
+                detail="workspace is not authorized for Feedback Desk integration",
+            )
+        return auth
 
     def current_release_auth(
         authorization: str | None = Header(default=None),
@@ -245,6 +271,93 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except LineMessagingError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"ok": True, "events": results}
+
+    @app.get("/api/v1/integrations/feedback-desk/reports")
+    def list_feedback_desk_reports(
+        request: Request,
+        auth: AuthContext = Depends(feedback_auth),
+    ) -> dict:
+        if feedback_desk is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Feedback Desk integration is not configured",
+            )
+        statuses = request.query_params.getlist("status")
+        allowed_statuses = {"new", "needs_input", "completed"}
+        if len(statuses) > 3 or any(status not in allowed_statuses for status in statuses):
+            raise HTTPException(
+                status_code=422,
+                detail="status must contain only new, needs_input or completed",
+            )
+        try:
+            payload = feedback_desk.list_reports(
+                status=statuses or None,
+                creator=request.query_params.get("creator"),
+                include_public=request.query_params.get("include_public", "").lower()
+                in {"1", "true", "yes"},
+                unread=request.query_params.get("unread", "").lower()
+                in {"1", "true", "yes"},
+            )
+        except (FeedbackDeskIntegrationError, McpHttpError, ValueError) as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="Feedback Desk report listing failed",
+            ) from exc
+        reports = payload["reports"]
+        return {
+            "project": feedback_desk.project_slug,
+            "count": len(reports),
+            "reports": reports,
+        }
+
+    @app.post("/api/v1/integrations/feedback-desk/reports/{report_ref}/tasks")
+    def create_task_from_feedback_desk_report(
+        report_ref: str,
+        auth: AuthContext = Depends(feedback_auth),
+    ) -> dict:
+        if feedback_desk is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Feedback Desk integration is not configured",
+            )
+        try:
+            report = feedback_desk.get_report(report_ref)
+            contract = feedback_desk.to_task_contract(
+                report,
+                tenant_id=auth.workspace_id,
+                user_id=auth.workspace_id,
+                required_outputs=settings.feedback_desk_required_outputs,
+            )
+            result = service.submit(contract)
+            if task_scheduler is not None:
+                dispatch = task_scheduler.schedule(contract.task_id)
+                result["execution_job_id"] = dispatch.job_id
+                result["execution_status"] = dispatch.status
+        except (FeedbackDeskIntegrationError, McpHttpError) as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="Feedback Desk report could not be imported",
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        audit = getattr(service, "audit", None)
+        if audit is not None:
+            audit.append(
+                "feedback_desk.task_imported",
+                actor=auth.workspace_id,
+                payload={
+                    "task_id": contract.task_id,
+                    "source_project_slug": feedback_desk.project_slug,
+                    "source_report_ref": str(report_ref)[:200],
+                    "source_status": str(report.get("status") or "")[:80],
+                },
+            )
+        return {
+            "source": "feedback-desk",
+            "source_report_ref": str(report_ref)[:200],
+            "task": result,
+        }
 
     @app.get("/health")
     def health() -> dict:
