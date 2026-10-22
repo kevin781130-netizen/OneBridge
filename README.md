@@ -271,3 +271,53 @@ GET /api/v1/deployments/openclaw/history
 Set `ONEBRIDGE_RELEASE_CONTROLLER_REQUIRED=true` and `ONEBRIDGE_RELEASE_TWO_PERSON_REQUIRED=true` for the strict production path. External OpenClaw actuation also forces the guarded release path. Database startup now runs versioned forward migrations; inspect them with `onebridge schema-status` and apply them explicitly with `onebridge migrate-db`.
 
 See `docs/RELEASE_OPERATOR.md`.
+
+## Feedback Desk read-only import
+
+OneBridge can read reports from a deployed [Feedback Desk](https://github.com/aixwangtw/feedback-desk)
+instance over its authenticated MCP endpoint and import an individual report as a
+reviewable OneBridge task. The integration never writes comments, claims, status
+changes, or completion state back to Feedback Desk.
+
+Configure all three connection values together:
+
+\`\`\`bash
+export ONEBRIDGE_FEEDBACK_DESK_MCP_URL="https://your-feedback-desk.example/mcp"
+export ONEBRIDGE_FEEDBACK_DESK_PROJECT_SLUG="your-project"
+export ONEBRIDGE_FEEDBACK_DESK_TOKEN="<developer MCP token>"
+\`\`\`
+
+Optional settings:
+
+\`\`\`bash
+export ONEBRIDGE_FEEDBACK_DESK_TIMEOUT_SECONDS="30"
+export ONEBRIDGE_FEEDBACK_DESK_REQUIRED_OUTPUTS="code,test_report"
+export ONEBRIDGE_FEEDBACK_DESK_ALLOWED_WORKSPACES="<onebridge-workspace-id>"
+\`\`\`
+
+Generate a developer MCP token using Feedback Desk's CLI and keep it in a secret
+manager or environment variable; never commit it. Remote MCP connections must
+use HTTPS. Plain HTTP is accepted only for a loopback development endpoint.
+The OneBridge import routes always require a valid OneBridge bearer API token and
+a matching workspace ID in \`ONEBRIDGE_FEEDBACK_DESK_ALLOWED_WORKSPACES\`; the
+allowlist is deliberately fail-closed.
+
+List reports (repeat \`status\` to filter more than one status):
+
+\`\`\`text
+GET /api/v1/integrations/feedback-desk/reports?status=new&unread=true
+\`\`\`
+
+Import one report as a new OneBridge task:
+
+\`\`\`text
+POST /api/v1/integrations/feedback-desk/reports/{report_ref}/tasks
+\`\`\`
+
+Imported report text, messages, handoff notes, and filenames are treated as
+untrusted data. Signed download URLs and storage keys are not copied into the
+task contract. Imported tasks default to \`before_publish\` approval and restricted
+network access. If the durable task queue is enabled, the task is dispatched to
+the configured worker; otherwise it remains submitted for the existing execution
+workflow.
+
