@@ -131,6 +131,25 @@ class Settings:
         os.getenv("ONEBRIDGE_OPEN_DESIGN_TIMEOUT_SECONDS", "120")
     )
 
+    feedback_desk_mcp_url: str | None = os.getenv(
+        "ONEBRIDGE_FEEDBACK_DESK_MCP_URL"
+    )
+    feedback_desk_project_slug: str | None = os.getenv(
+        "ONEBRIDGE_FEEDBACK_DESK_PROJECT_SLUG"
+    )
+    feedback_desk_token: str | None = os.getenv(
+        "ONEBRIDGE_FEEDBACK_DESK_TOKEN"
+    )
+    feedback_desk_allowed_workspaces: tuple[str, ...] = _env_csv(
+        "ONEBRIDGE_FEEDBACK_DESK_ALLOWED_WORKSPACES"
+    )
+    feedback_desk_timeout_seconds: float = float(
+        os.getenv("ONEBRIDGE_FEEDBACK_DESK_TIMEOUT_SECONDS", "30")
+    )
+    feedback_desk_required_outputs: tuple[str, ...] = _env_csv(
+        "ONEBRIDGE_FEEDBACK_DESK_REQUIRED_OUTPUTS"
+    ) or ("code", "test_report")
+
     hermes_executable: str | None = os.getenv("ONEBRIDGE_HERMES_EXECUTABLE")
     hermes_args: tuple[str, ...] = _env_json_list(
         "ONEBRIDGE_HERMES_ARGS_JSON",
