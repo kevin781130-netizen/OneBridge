@@ -54,7 +54,41 @@ def main(argv: list[str] | None = None) -> int:
         choices=["flowise", "open_design", "hermes"],
     )
 
+    evidence_validate = sub.add_parser(
+        "evidence-validate", help="Validate a TRISYNORA v1 evidence bundle (no approval)."
+    )
+    evidence_validate.add_argument("bundle")
+    evidence_validate.add_argument("--evidence-root", default=None)
+    evidence_pointflux = sub.add_parser(
+        "evidence-import-pointflux", help="Validate PointFlux temporal evidence into a dedicated ledger."
+    )
+    for option in (
+        "evidence-root", "render-manifest", "judgement", "artifact",
+        "tenant-id", "project-id", "shot-id", "project-name",
+        "intent", "produced-at", "ledger",
+    ):
+        evidence_pointflux.add_argument("--" + option, required=True)
+
     args = parser.parse_args(argv)
+
+    if args.command == "evidence-validate":
+        from .evidence_contracts.validator import main as evidence_main
+        params = [args.bundle]
+        if args.evidence_root:
+            params += ["--evidence-root", args.evidence_root]
+        return evidence_main(params)
+
+    if args.command == "evidence-import-pointflux":
+        from .evidence_contracts.adapters.pointflux import main as pointflux_main
+        params = []
+        for option in (
+            "evidence-root", "render-manifest", "judgement", "artifact",
+            "tenant-id", "project-id", "shot-id", "project-name",
+            "intent", "produced-at", "ledger",
+        ):
+            params.extend(["--" + option, getattr(args, option.replace("-", "_"))])
+        return pointflux_main(params)
+
 
     if args.command == "init-db":
         settings = Settings()

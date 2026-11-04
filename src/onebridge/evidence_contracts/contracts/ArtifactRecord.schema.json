@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.trisynora.dev/v1/ArtifactRecord.schema.json",
+  "title": "TRISYNORA ArtifactRecord v1",
+  "description": "Structure only. Human authority and file-integrity require trusted runtime validation.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "trisynora/v1"
+    },
+    "record_type": {
+      "const": "ArtifactRecord"
+    },
+    "record_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "project_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "produced_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "producer": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "producer_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "system": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "system",
+        "reference",
+        "sha256"
+      ],
+      "additionalProperties": false
+    },
+    "shot_record_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "artifact": {
+      "type": "object",
+      "properties": {
+        "relative_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "^(?:/|\\\\|[A-Za-z]:|[a-z]+://)"
+              }
+            },
+            {
+              "not": {
+                "pattern": "(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)"
+              }
+            }
+          ]
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "mime": {
+          "type": "string",
+          "pattern": "^[a-z0-9.+-]+/[a-z0-9.+-]+$"
+        },
+        "byte_size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fps_num": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fps_den": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "frame_count": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "relative_path",
+        "sha256",
+        "mime",
+        "byte_size"
+      ],
+      "additionalProperties": false
+    },
+    "input_digests": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      },
+      "maxItems": 128,
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "schema_version",
+    "record_type",
+    "record_id",
+    "event_id",
+    "tenant_id",
+    "project_id",
+    "produced_at",
+    "producer",
+    "producer_version",
+    "source",
+    "shot_record_id",
+    "artifact"
+  ],
+  "additionalProperties": false
+}

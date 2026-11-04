@@ -271,3 +271,36 @@ GET /api/v1/deployments/openclaw/history
 Set `ONEBRIDGE_RELEASE_CONTROLLER_REQUIRED=true` and `ONEBRIDGE_RELEASE_TWO_PERSON_REQUIRED=true` for the strict production path. External OpenClaw actuation also forces the guarded release path. Database startup now runs versioned forward migrations; inspect them with `onebridge schema-status` and apply them explicitly with `onebridge migrate-db`.
 
 See `docs/RELEASE_OPERATOR.md`.
+
+
+## Optional TRISYNORA evidence contracts (OneBridge namespace)
+
+The standalone TRISYNORA v1 evidence contract kernel is preserved under
+`onebridge.evidence_contracts`, with its original `trisynora/v1` schemas,
+strict lineage validation, optional real-byte SHA-256 verification, independent
+append-only SQLite evidence ledger, and read-only PointFlux temporal import.
+
+Install the optional validator dependency: `pip install -e '.[evidence]'`.
+These commands are local operator actions, not unauthenticated HTTP endpoints:
+
+```bash
+onebridge evidence-validate /path/to/bundle.json --evidence-root /approved/evidence
+onebridge evidence-import-pointflux \
+  --evidence-root /approved/pointflux-output \
+  --render-manifest run/render-manifest.json \
+  --judgement judge/temporal-judgement.json \
+  --artifact run/clip.mp4 \
+  --tenant-id organization1 --project-id campaign1 \
+  --shot-id shot1 --project-name "Campaign 1" \
+  --intent "Review clip" --produced-at 2026-11-04T00:00:00Z \
+  --ledger /approved/onebridge/temporal-evidence.sqlite
+```
+
+The imported ledger is **not** OneBridge's existing hash-chain task audit or
+durable task/artifact database. Unifying storage requires a separate reviewed
+migration, not an implicit change in authorization or existing records.
+TRISYNORA schema validation and hash checking do not authenticate the producer,
+prove artistic/video quality, or grant human or publication approval. Vera
+retains final verification and authorization authority.
+
+Details, source SHA, and limitations: [migration note](docs/TRISYNORA_EVIDENCE_MIGRATION.md).

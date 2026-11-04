@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.trisynora.dev/v1/EvaluationRecord.schema.json",
+  "title": "TRISYNORA EvaluationRecord v1",
+  "description": "Structure only. Human authority and file-integrity require trusted runtime validation.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "trisynora/v1"
+    },
+    "record_type": {
+      "const": "EvaluationRecord"
+    },
+    "record_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "project_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "produced_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "producer": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "producer_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "system": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "system",
+        "reference",
+        "sha256"
+      ],
+      "additionalProperties": false
+    },
+    "artifact_record_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "artifact_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "evaluator": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "evaluator_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "status": {
+      "enum": [
+        "passed",
+        "failed",
+        "not-run",
+        "blocked"
+      ]
+    },
+    "criteria": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+          },
+          "status": {
+            "enum": [
+              "passed",
+              "failed",
+              "not-run",
+              "blocked"
+            ]
+          },
+          "actual": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "threshold": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "report": {
+      "type": "object",
+      "properties": {
+        "relative_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "^(?:/|\\\\|[A-Za-z]:|[a-z]+://)"
+              }
+            },
+            {
+              "not": {
+                "pattern": "(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)"
+              }
+            }
+          ]
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "relative_path",
+        "sha256"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "record_type",
+    "record_id",
+    "event_id",
+    "tenant_id",
+    "project_id",
+    "produced_at",
+    "producer",
+    "producer_version",
+    "source",
+    "artifact_record_id",
+    "artifact_sha256",
+    "evaluator",
+    "evaluator_version",
+    "status",
+    "criteria",
+    "report"
+  ],
+  "additionalProperties": false
+}

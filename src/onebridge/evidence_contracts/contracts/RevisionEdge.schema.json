@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.trisynora.dev/v1/RevisionEdge.schema.json",
+  "title": "TRISYNORA RevisionEdge v1",
+  "description": "Structure only. Human authority and file-integrity require trusted runtime validation.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "trisynora/v1"
+    },
+    "record_type": {
+      "const": "RevisionEdge"
+    },
+    "record_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "project_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "produced_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "producer": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "producer_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "system": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "system",
+        "reference",
+        "sha256"
+      ],
+      "additionalProperties": false
+    },
+    "from_artifact_record_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "to_artifact_record_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "before_evaluation_record_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "after_evaluation_record_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "change_summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "change_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "schema_version",
+    "record_type",
+    "record_id",
+    "event_id",
+    "tenant_id",
+    "project_id",
+    "produced_at",
+    "producer",
+    "producer_version",
+    "source",
+    "from_artifact_record_id",
+    "to_artifact_record_id",
+    "change_summary",
+    "change_digest"
+  ],
+  "additionalProperties": false
+}

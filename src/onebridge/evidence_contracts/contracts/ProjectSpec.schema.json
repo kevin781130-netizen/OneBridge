@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.trisynora.dev/v1/ProjectSpec.schema.json",
+  "title": "TRISYNORA ProjectSpec v1",
+  "description": "Structure only. Human authority and file-integrity require trusted runtime validation.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "trisynora/v1"
+    },
+    "record_type": {
+      "const": "ProjectSpec"
+    },
+    "record_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "project_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "produced_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "producer": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+    },
+    "producer_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "system": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$"
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "system",
+        "reference",
+        "sha256"
+      ],
+      "additionalProperties": false
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "delivery": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 16384
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 16384
+        },
+        "fps_num": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "fps_den": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "fps_num",
+        "fps_den"
+      ],
+      "additionalProperties": false
+    },
+    "rights": {
+      "type": "object",
+      "properties": {
+        "reuse_allowed": {
+          "type": "boolean"
+        },
+        "cross_tenant_learning_allowed": {
+          "type": "boolean"
+        },
+        "external_training_allowed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "reuse_allowed",
+        "cross_tenant_learning_allowed",
+        "external_training_allowed"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "record_type",
+    "record_id",
+    "event_id",
+    "tenant_id",
+    "project_id",
+    "produced_at",
+    "producer",
+    "producer_version",
+    "source",
+    "name",
+    "delivery",
+    "rights"
+  ],
+  "additionalProperties": false
+}
