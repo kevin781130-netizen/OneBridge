@@ -13,6 +13,7 @@ import json
 import math
 from pathlib import Path
 import re
+import sqlite3
 import sys
 from typing import Any
 
@@ -249,7 +250,7 @@ def main(argv: list[str] | None = None) -> int:
             result = ledger.append(bundle, evidence_root=args.evidence_root)
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0
-    except (ContractError, OSError, ValueError, TypeError) as exc:
+    except (ContractError, OSError, ValueError, TypeError, sqlite3.Error) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False, sort_keys=True))
         return 1
 

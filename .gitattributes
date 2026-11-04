@@ -1,0 +1,3 @@
+# 證據檔以位元組計算 SHA-256，禁止換行轉換
+docs/examples/trisynora/assets/* -text
+src/onebridge/evidence_contracts/contracts/*.json -text

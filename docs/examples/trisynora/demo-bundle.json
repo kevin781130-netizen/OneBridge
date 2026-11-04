@@ -1,0 +1,109 @@
+[
+  {
+    "schema_version": "trisynora/v1",
+    "record_type": "EvaluationRecord",
+    "record_id": "ev1",
+    "event_id": "evt_ev1",
+    "tenant_id": "demo_tenant",
+    "project_id": "demo_project",
+    "produced_at": "2026-10-11T09:30:00Z",
+    "producer": "pointflux",
+    "producer_version": "demo-only",
+    "source": {
+      "system": "pointflux",
+      "reference": "illustrative/ev1",
+      "sha256": "b0c82a3ade3497964cb8034be915da179459287823d92b5717e6d642784c50e6"
+    },
+    "artifact_record_id": "a1",
+    "artifact_sha256": "aca2f197fcd18f7a5f572f7e20a6db269a7daebd1df6b40c53adab986ffb1dfc",
+    "evaluator": "demo-not-executed",
+    "evaluator_version": "demo",
+    "status": "not-run",
+    "criteria": [
+      {
+        "name": "reference_frame",
+        "status": "not-run"
+      }
+    ],
+    "report": {
+      "relative_path": "sample-judge.json",
+      "sha256": "321b59c8cd30be1ab2102f5943fcf52f9580777bed7c166c113181c17e30c316"
+    }
+  },
+  {
+    "schema_version": "trisynora/v1",
+    "record_type": "ArtifactRecord",
+    "record_id": "a1",
+    "event_id": "evt_a1",
+    "tenant_id": "demo_tenant",
+    "project_id": "demo_project",
+    "produced_at": "2026-10-11T09:30:00Z",
+    "producer": "pointflux",
+    "producer_version": "demo-only",
+    "source": {
+      "system": "pointflux",
+      "reference": "illustrative/a1",
+      "sha256": "f55ff16f66f43360266b95db6f8fec01d76031054306ae4a4b380598f6cfd114"
+    },
+    "shot_record_id": "s1",
+    "artifact": {
+      "relative_path": "sample-output.bin",
+      "sha256": "aca2f197fcd18f7a5f572f7e20a6db269a7daebd1df6b40c53adab986ffb1dfc",
+      "mime": "application/octet-stream",
+      "byte_size": 55
+    }
+  },
+  {
+    "schema_version": "trisynora/v1",
+    "record_type": "ProjectSpec",
+    "record_id": "p1",
+    "event_id": "evt_p1",
+    "tenant_id": "demo_tenant",
+    "project_id": "demo_project",
+    "produced_at": "2026-10-11T09:30:00Z",
+    "producer": "minimax-h3",
+    "producer_version": "demo-only",
+    "source": {
+      "system": "minimax-h3",
+      "reference": "illustrative/p1",
+      "sha256": "f64551fcd6f07823cb87971cfb91446425da18286b3ab1ef935e0cbd7a69f68a"
+    },
+    "name": "Demo Project",
+    "delivery": {
+      "width": 1920,
+      "height": 1080,
+      "fps_num": 30,
+      "fps_den": 1
+    },
+    "rights": {
+      "reuse_allowed": false,
+      "cross_tenant_learning_allowed": false,
+      "external_training_allowed": false
+    }
+  },
+  {
+    "schema_version": "trisynora/v1",
+    "record_type": "ShotSpec",
+    "record_id": "s1",
+    "event_id": "evt_s1",
+    "tenant_id": "demo_tenant",
+    "project_id": "demo_project",
+    "produced_at": "2026-10-11T09:30:00Z",
+    "producer": "minimax-h3",
+    "producer_version": "demo-only",
+    "source": {
+      "system": "minimax-h3",
+      "reference": "illustrative/s1",
+      "sha256": "e8bc163c82eee18733288c7d4ac636db3a6deb013ef2d37b68322be20edc45cc"
+    },
+    "project_spec_record_id": "p1",
+    "shot_id": "shot1",
+    "duration_frames": 300,
+    "fps_num": 30,
+    "fps_den": 1,
+    "intent": "Particle logo reveal illustration",
+    "acceptance_criteria": [
+      "reference frame should match"
+    ]
+  }
+]

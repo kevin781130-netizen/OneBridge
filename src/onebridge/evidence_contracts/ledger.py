@@ -138,7 +138,10 @@ class EvidenceLedger:
                 "warning": "chain is tamper-evident only against uncoordinated changes; not cryptographic attestation",
             }
         except Exception:
-            self.conn.execute("ROLLBACK")
+            # BEGIN 本身失敗（例如資料庫被鎖定）時沒有交易可回滾；
+            # 不可讓 ROLLBACK 的錯誤遮蔽原始失敗原因。
+            if self.conn.in_transaction:
+                self.conn.execute("ROLLBACK")
             raise
 
     def read(self, tenant: str, project: str) -> list[dict[str, Any]]:

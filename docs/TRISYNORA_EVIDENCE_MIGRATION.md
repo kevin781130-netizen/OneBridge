@@ -44,3 +44,9 @@ Before retiring the source: verify current downstream consumers and imports,
 preserve tags and history, confirm the new branch is integrated and tested,
 then explicitly delete or archive the old repository. Do not delete the
 source as part of this branch migration.
+
+## 收斂與退役驗證
+最終審計、功能對照矩陣、跨專案依賴掃描與刪除判定見
+[TRISYNORA_RETIREMENT_GATE.md](TRISYNORA_RETIREMENT_GATE.md)。
+本次收斂另補遷 `scripts/make_trisynora_schemas.py` 與 `docs/examples/trisynora/`，
+並修復 ledger 鎖定時的錯誤遮蔽與 PointFlux CLI 的 sqlite 錯誤處理。
