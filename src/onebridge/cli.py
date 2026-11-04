@@ -79,7 +79,21 @@ def main(argv: list[str] | None = None) -> int:
     ):
         evidence_h3.add_argument("--" + option, required=True)
 
+    evidence_ref = sub.add_parser(
+        "evidence-pointflux-reference",
+        help="Convert a PointFlux reference-only shot exchange into ProjectSpec/ShotSpec metadata (read-only, no ledger).",
+    )
+    for option in ("exchange", "scene-root", "scene-map", "tenant-id", "project-name", "produced-at", "out"):
+        evidence_ref.add_argument("--" + option, required=True)
+
     args = parser.parse_args(argv)
+
+    if args.command == "evidence-pointflux-reference":
+        from .evidence_contracts.adapters.pointflux_reference import main as pointflux_ref_main
+        params = []
+        for option in ("exchange", "scene-root", "scene-map", "tenant-id", "project-name", "produced-at", "out"):
+            params.extend(["--" + option, getattr(args, option.replace("-", "_"))])
+        return pointflux_ref_main(params)
 
     if args.command == "evidence-validate":
         from .evidence_contracts.validator import main as evidence_main

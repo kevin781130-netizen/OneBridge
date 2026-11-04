@@ -21,7 +21,7 @@ import sqlite3
 import sys
 from typing import Any
 
-from .._files import read_local
+from .._files import read_local, strict_json
 from ..ledger import EvidenceLedger
 from ..media_probe import MAX_VIDEO_BYTES, MediaProbeUnavailable, probe_mp4
 from ..validator import ContractError, validate_bundle
@@ -31,15 +31,6 @@ _REC_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$")
 _SHA256 = re.compile(r"^[a-fA-F0-9]{64}$")
 _H3_PACKS = frozenset({"h3-short-drama", "h3-music-video", "h3-native-shot"})
 MAX_SNAPSHOT_BYTES = 16 * 1024 * 1024
-
-
-def _strict_pairs(pairs: list[tuple[str, object]]) -> dict:
-    out: dict = {}
-    for key, value in pairs:
-        if key in out:
-            raise ContractError("DUPLICATE_JSON_KEY")
-        out[key] = value
-    return out
 
 
 def _unique(matches: list, code: str) -> dict:
@@ -125,12 +116,7 @@ def make_bundle(*, evidence_root: str | Path, project_file: str, video: str,
     snapshot_bytes = snap_path.read_bytes()
     if hashlib.sha256(snapshot_bytes).hexdigest() != snap_sha:
         raise ContractError("SNAPSHOT_CHANGED_DURING_CHECK")
-    try:
-        snapshot = json.loads(
-            snapshot_bytes.decode("utf-8"), object_pairs_hook=_strict_pairs,
-            parse_constant=lambda _: (_ for _ in ()).throw(ContractError("NONFINITE_JSON")))
-    except (UnicodeError, json.JSONDecodeError) as exc:
-        raise ContractError("INVALID_SNAPSHOT_JSON") from exc
+    snapshot = strict_json(snapshot_bytes, invalid="INVALID_SNAPSHOT_JSON")
     if not isinstance(snapshot, dict):
         raise ContractError("INVALID_SNAPSHOT_JSON")
 

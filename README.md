@@ -308,4 +308,8 @@ real ffprobe/ffmpeg decode, requires `ffmpeg` on PATH) and recorded into the sam
 `onebridge evidence-import-h3-take` (exit 0 recorded, 1 blocked, 4 not verified). It never
 approves a release or imports into PointFlux. See [H3 take import](docs/H3_TAKE_EVIDENCE_IMPORT.md).
 
+A PointFlux reference-only shot exchange can be converted (read-only, SHA-256 verified against the
+original Scene IR bytes) into ProjectSpec/ShotSpec metadata with `onebridge evidence-pointflux-reference`;
+see [reference adapter](docs/POINTFLUX_REFERENCE_ADAPTER_V1.md).
+
 Details, source SHA, and limitations: [migration note](docs/TRISYNORA_EVIDENCE_MIGRATION.md).

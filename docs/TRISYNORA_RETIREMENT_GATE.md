@@ -6,10 +6,11 @@
 
 **`NOT_SAFE_TO_DELETE`**
 
-`main@debeb2a` 的必要功能，以及 `feat/p1-h3-real-take-gate-20261101` 的「消費端」必要功能（Take 收據綁定＋真實媒體解碼），
-已遷入 OneBridge 並以真實檔案與真實 ffmpeg 驗證；minimax-H3 **沒有任何執行期程式碼依賴** TRISYNORA。
-但 TRISYNORA 仍有 **10 條未合併分支（其中 H3 分支僅部分遷移）與 9 個 PR** 的內容尚無保存或放棄的決定，
-且 minimax-H3 文件仍有指向 TRISYNORA 分支的操作文字（純文件，需在 H3 repo 更新）。
+`main@debeb2a` 的必要功能、`feat/p1-h3-real-take-gate-20261101` 的「消費端」必要功能（Take 收據綁定＋真實媒體解碼），
+以及 `feature/pointflux-reference-evidence-adapter-20261018` 的 PointFlux Reference Adapter，已遷入 OneBridge 並以真實檔案與真實 ffmpeg 驗證；minimax-H3 **沒有任何執行期程式碼依賴** TRISYNORA。
+但 TRISYNORA 仍有 **9 條未合併分支（其中 H3 分支僅部分遷移）與 9 個 PR** 的內容尚無保存或放棄的決定
+（唯一已遷移完畢的分支內容為 #9；其 PR／分支本身仍存在於來源 repo），
+且 minimax-H3 的修正尚在隔離分支、未合併，另有兩條 H3 分支仍有舊文字。
 永久刪除 Repository 會一併失去這些內容。詳見第 5、6、9 節。
 
 ## 1. 來源與目標 Git SHA
@@ -24,7 +25,10 @@
 | 第一次收斂 Commit | `388dd8c195e353ce9d834e3882514ae73531ff7d` |
 | 第二次（H3 分支）來源 | `TRISYNORA` 分支 `feat/p1-h3-real-take-gate-20261101`＠`bb47c04fe9257f7262c7c297f85c31d8664a8f9d` |
 | H3 側比對對象 | `minimax-H3`＠`artifacts/h3-novafield-local-gate-20261102`（`f85ac44d14902463c7f7447e68d97cd8ad041742`）與 `feat/h3-native-take-export-20261101`（`302ff5af139e9c133f78d40fba8df994869c6f2f`） |
-| 第二次收斂 Commit | 即包含本文件的分支 HEAD（見回報；文件無法自我引用其雜湊） |
+| 第二次收斂 Commit | `ddf6175bce00f6263178bf1c4e06990364dfb91d` |
+| 第三次（Reference Adapter）來源 | `TRISYNORA` 分支 `feature/pointflux-reference-evidence-adapter-20261018`＠`01ba38c08cfe`（相對 `main` 僅新增 3 個檔案，已逐一遷移） |
+| minimax-H3 隔離修正分支 | `docs/retire-trisynora-refs-20261104`＠`75e448d8c9247933319e362afeb3612b7078a165`（未合併） |
+| 第三次收斂 Commit | 即包含本文件的分支 HEAD（見回報；文件無法自我引用其雜湊） |
 
 OneBridge `main` 未被修改。
 
@@ -76,6 +80,19 @@ OneBridge `main` 未被修改。
 
 說明與操作方式：[H3_TAKE_EVIDENCE_IMPORT.md](H3_TAKE_EVIDENCE_IMPORT.md)。
 
+### Reference Adapter 分支（`feature/pointflux-reference-evidence-adapter-20261018`）功能比對
+
+| 來源檔案 | OneBridge 位置 | 判定 |
+|---|---|---|
+| `trisynora/adapters/pointflux_reference.py`（exchange 結構驗證、原生 Scene IR 投影比對、SHA-256 位元組核對、ProjectSpec／ShotSpec 轉換、CLI） | `evidence_contracts/adapters/pointflux_reference.py`；CLI `onebridge evidence-pointflux-reference` | **PASS（已遷移）** |
+| `tests/test_pointflux_reference_adapter.py`（10 個） | `tests/test_trisynora_pointflux_reference.py`（10 個原測試＋14 個新增） | **PASS** |
+| `docs/POINTFLUX_REFERENCE_ADAPTER_V1.md` | `docs/POINTFLUX_REFERENCE_ADAPTER_V1.md`（改寫為 OneBridge 指令） | **PASS** |
+
+重用而非重寫：schema 與 `validate_bundle`（既有 v1 契約，未改 schema）、`_files.read_local`（路徑／symlink 安全，取代原自製 `_source_bytes`）、
+新抽出的 `_files.strict_json`（重複 key／NaN 拒絕；H3 adapter 同步改用，錯誤碼不變）。
+唯一獨有的是 PointFlux exchange 格式與 Scene IR 投影比對邏輯。輸出維持純唯讀中繼資料檔（exclusive-create、不得位於來源專案內），
+不寫 ledger、不產生 ArtifactRecord／EvaluationRecord、不執行 PointFlux／H3、無發布或核准權限（輸出旗標恆為 false，並有邊界測試）。
+
 ### 與既有 OneBridge 模組的重複性檢查（補充）
 
 - 路徑安全讀檔原本私有於 `adapters/pointflux.py`，已抽成 `evidence_contracts/_files.py`，PointFlux 與 H3 adapter 共用同一份（行為不變，原測試全數通過）。
@@ -98,15 +115,16 @@ python -m pip install -e '.[dev,evidence]'          → 成功
 python -m pytest tests/test_trisynora_contracts.py tests/test_trisynora_ledger.py \
        tests/test_trisynora_pointflux_adapter.py tests/test_trisynora_integration.py
                                                     → 57 passed
-python -m pytest                                    → 275 passed, 0 failed, 1 skipped
+python -m pytest                                    → 299 passed, 0 failed, 1 skipped（第三次收斂後）
 H3_NATIVE_TAKE_EXPORT=<H3 exporter 路徑> python -m pytest
-                                                    → 276 passed, 0 failed, 0 skipped
+                                                    → 300 passed, 0 failed, 0 skipped（第三次收斂後）
 ```
 
 唯一 skip 為「以 minimax-H3 真實 exporter 產生副本再匯入」的跨專案相容測試（需指定 exporter 路徑才執行，預設 NOT_RUN）；
 上列第二行為指向 H3 `artifacts/h3-novafield-local-gate-20261102` 分支真實 `backend/native_take_export.py` 的實跑結果。
 
 - 來源 TRISYNORA `pytest tests`：53 passed（基準）。
+- PointFlux Reference Adapter（`tests/test_trisynora_pointflux_reference.py`，24 個）：10 個原測試＋CLI 正向、與 ledger 相容、拒絕覆寫輸出、輸出位於來源內、竄改 SHA-256、`../`／絕對路徑／反斜線／缺檔、symlink 場景檔與根目錄、畸形 JSON／時間戳。
 - H3 Take 匯入（`tests/test_trisynora_h3_take.py`，45 個）：以 ffmpeg 6.1.1 實際編碼的 H.264 MP4 驗證正向、重放冪等、
   非 MP4／帶音訊／mpeg4／yuv444p／過小尺寸／截斷檔／合法但被替換的影片、收據竄改、重複 take／run、未完成歷史、
   重複 JSON key、NaN、`../`、絕對路徑、反斜線、symlink、PATH 無 ffmpeg（exit 4 且不寫入）。
@@ -127,6 +145,7 @@ H3_NATIVE_TAKE_EXPORT=<H3 exporter 路徑> python -m pytest
 | 真實 PointFlux／Chromium 產出之 MP4 與 judgement | **NOT_RUN**（PointFlux adapter 測試媒體為合成資料，僅驗證容器標頭） |
 | 真實 H3／ComfyUI 渲染產生的 Take（真實 ProjectStore 與 GPU 輸出） | **NOT_RUN**（H3 exporter 以測試快照與 ffmpeg testsrc 影片實跑，非真實 H3 渲染） |
 | Windows 上的 ffmpeg／H3 exporter 實跑 | **NOT_RUN** |
+| 以 PointFlux 真實 `scripts/export-shot-exchange.mjs` 產生 exchange 再轉換 | **NOT_RUN**（需安裝 npm 依賴並執行外部程式碼，環境政策拒絕；僅以入庫 fixture 做結構驗證） |
 | H3 exporter 所在分支尚未合併至 minimax-H3 `main`（`main` 最後更新 2026-09-14） | 事實陳述；完整「H3 → OneBridge」鏈需該分支合併後才能在 H3 主線使用 |
 | GitHub Actions／Docker | 依指示不使用 |
 | 外部服務 | 無（證據模組不呼叫任何外部服務） |
@@ -166,7 +185,7 @@ minimax-H3 說明（第二次收斂後）：
 
 | 分支（PR） | 相對 main 的內容 | 遷移？ |
 |---|---|---|
-| `feature/pointflux-reference-evidence-adapter-20261018`（#9） | 新增 `trisynora/adapters/pointflux_reference.py`、`tests/test_pointflux_reference_adapter.py`、`docs/POINTFLUX_REFERENCE_ADAPTER_V1.md`——**與已遷移功能同類的 PointFlux 程式碼** | 未遷移，**BLOCKED** |
+| `feature/pointflux-reference-evidence-adapter-20261018`（#9） | 新增 `pointflux_reference.py`、測試、文件（相對 `main` 僅此 3 檔） | **已遷移（PASS）**，見第 2 節 |
 | `feat/p1-h3-real-take-gate-20261101` | H3 Take 交換 bridge、G3／G4 治理檔、`schemas/v1`（asset／capability／evidence／job／shot） | **部分遷移**：消費端必要功能已遷（見第 2 節）；`schemas/v1` 交接包系統與 G1–G4 治理未遷（無執行消費者／屬 repo 自身治理），需人決定放棄與否 |
 | `feat/p1-h3-video-handoff-dryrun`（#2）、`feat/p1-pointflux-receiver-contract`（#3）、`feat/p1-real-mp4-probe-gate`（#4）、`feat/p1-g1-isolation-audit`（#5）、`feat/p1-g2-bridge-rehearsal`（#6）、`feat/g3-release-freeze-v01rc`（#7） | P1 交接／MP4 探測／隔離稽核／橋接演練／凍結審查之程式、文件與測試（H3 分支為這些分支的超集） | 通用媒體探測已隨 H3 分支遷移；其餘為 `schemas/v1` 交接包與 repo 治理，未遷移，需人決定 |
 | `docs/constitution-v1`（#1） | CONSTITUTION、ADR、治理與測試；**刪除**了 `docs/contracts`（與本次遷移的 v1 契約路線相衝突） | 未遷移，需人決定 |
@@ -179,6 +198,7 @@ minimax-H3 說明（第二次收斂後）：
 
 - 遷移前基底 `5546ed7`：`156 passed`（於 detached worktree 實測）。
 - 第一次收斂：`231 passed`（原有 156 ＋ 75：原始 53、整合 4、CLI 與邊界 18）。
+- 第三次（Reference Adapter）收斂後：`299 passed, 0 failed, 1 skipped`（＋24 個）；設定 `H3_NATIVE_TAKE_EXPORT` 後 `300 passed, 0 skipped`。既有 156 個原有測試全數仍通過。
 - 第二次（H3）收斂後：`275 passed, 0 failed, 1 skipped`（＋H3 Take 匯入 44 個通過、1 個跨專案相容測試預設 skip）；
   設定 `H3_NATIVE_TAKE_EXPORT` 後 `276 passed, 0 skipped`。既有 156 個測試全數仍在且通過。
 - 未刪除或修改任何既有 OneBridge 測試與模組；既有 `onebridge.evidence.classify_evidence` 未被覆蓋（有測試）。
@@ -220,12 +240,11 @@ git bundle verify ../TRISYNORA-all-refs.bundle
 
 尚存阻擋：
 
-1. **BLOCKED**：`feature/pointflux-reference-evidence-adapter-20261018`（#9）的 `pointflux_reference.py` adapter 與測試未遷移（與已遷移功能同類的 PointFlux 程式碼）。
-2. **BLOCKED**：其餘未合併分支內容（`schemas/v1` 交接包系統、G1–G4 治理、`docs/constitution-v1`、deepseek harness）尚未決定保存或放棄。
-3. **BLOCKED（文件）**：minimax-H3 內仍有指向 TRISYNORA 分支的操作文字（第 5 節），需在 H3 repo 更新；本次未獲寫入授權。
-4. **UNKNOWN**：其餘 Repository、GitHub 平台資料（Issue／PR 內文、secrets、Webhook 等）、使用者本機環境之依賴。
-5. **NOT_RUN**：Windows／macOS／Python 3.11–3.12；真實 PointFlux 產出；真實 H3／ComfyUI 渲染產生的 Take；Windows 上的 ffmpeg 實跑。
+1. **BLOCKED**：其餘未合併分支內容（`schemas/v1` 交接包系統、G1–G4 治理、`docs/constitution-v1`、deepseek harness，PR #1–#8）尚未決定保存或放棄。本次重新核對：除上述外，來源 repo 已無其他尚未遷移的**執行期功能**缺口（`main`、H3 消費端、Reference Adapter 皆已遷移；其餘為被有意排除的交接包格式與 repo 自身治理／實驗）。
+2. **BLOCKED（文件）**：minimax-H3 的舊引用修正僅在隔離分支 `docs/retire-trisynora-refs-20261104`（未合併、未開 PR）；
+   `claude/hopeful-dijkstra-yj2veh` 與 `feat/h3-native-take-export-20261101` 仍有舊文字，另有少數狀態標籤與 exporter docstring 依限制未改。
+3. **UNKNOWN**：其餘 Repository、GitHub 平台資料（Issue／PR 內文、secrets、Webhook 等）、使用者本機環境之依賴。
+4. **NOT_RUN**：Windows／macOS／Python 3.11–3.12；真實 PointFlux 產出與真實 PointFlux exporter 實跑；真實 H3／ComfyUI 渲染產生的 Take；Windows 上的 ffmpeg 實跑。
 
-解除條件（由擁有者決定後再重審）：(a) 決定 `pointflux_reference` adapter 是否遷移（遷移則另開一刀）或宣告放棄；
-(b) 以 mirror bundle 保存全部 ref，或明確宣告其餘分支工作放棄；(c) 在 minimax-H3 更新第 5 節所列文件，或宣告該文字可過時；
-(d) 確認 UNKNOWN 項目；(e) 在 Windows／macOS 補跑測試，並以真實 H3 Take 做一次端到端。
+解除條件（由擁有者決定後再重審）：(a) 以 mirror bundle 保存全部 ref，或明確宣告其餘分支工作放棄；
+(b) 合併或處置 minimax-H3 修正分支，並處理另兩條分支；(c) 確認 UNKNOWN 項目；(d) 在 Windows／macOS 補跑測試，並以真實 PointFlux／H3 輸出各做一次端到端。

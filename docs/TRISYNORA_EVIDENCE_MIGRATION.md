@@ -56,3 +56,8 @@ source as part of this branch migration.
 `onebridge evidence-import-h3-take`（Take 收據與媒體位元組綁定＋真實 ffprobe／ffmpeg 解碼＋寫入既有 ledger）。
 H3 專屬產生邏輯留在 minimax-H3；不遷移 `schemas/v1` 交接包與 G1–G4 治理。
 詳見 [H3_TAKE_EVIDENCE_IMPORT.md](H3_TAKE_EVIDENCE_IMPORT.md)。
+
+## PointFlux Reference Adapter（第三次收斂）
+自 TRISYNORA `feature/pointflux-reference-evidence-adapter-20261018` 遷入 `adapters/pointflux_reference.py`，
+CLI：`onebridge evidence-pointflux-reference`。只產生 ProjectSpec／ShotSpec 中繼資料檔，不寫 ledger、不核准。
+詳見 [POINTFLUX_REFERENCE_ADAPTER_V1.md](POINTFLUX_REFERENCE_ADAPTER_V1.md)。
