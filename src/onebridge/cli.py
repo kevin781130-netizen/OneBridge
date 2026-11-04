@@ -69,6 +69,16 @@ def main(argv: list[str] | None = None) -> int:
     ):
         evidence_pointflux.add_argument("--" + option, required=True)
 
+    evidence_h3 = sub.add_parser(
+        "evidence-import-h3-take",
+        help="Verify an exported H3 Take copy (receipt + real MP4 decode) into a dedicated ledger.",
+    )
+    for option in (
+        "evidence-root", "project-file", "video", "h3-project-id", "take-id",
+        "tenant-id", "project-id", "produced-at", "ledger",
+    ):
+        evidence_h3.add_argument("--" + option, required=True)
+
     args = parser.parse_args(argv)
 
     if args.command == "evidence-validate":
@@ -77,6 +87,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.evidence_root:
             params += ["--evidence-root", args.evidence_root]
         return evidence_main(params)
+
+    if args.command == "evidence-import-h3-take":
+        from .evidence_contracts.adapters.h3_take import main as h3_take_main
+        params = []
+        for option in (
+            "evidence-root", "project-file", "video", "h3-project-id", "take-id",
+            "tenant-id", "project-id", "produced-at", "ledger",
+        ):
+            params.extend(["--" + option, getattr(args, option.replace("-", "_"))])
+        return h3_take_main(params)
 
     if args.command == "evidence-import-pointflux":
         from .evidence_contracts.adapters.pointflux import main as pointflux_main

@@ -50,3 +50,9 @@ source as part of this branch migration.
 [TRISYNORA_RETIREMENT_GATE.md](TRISYNORA_RETIREMENT_GATE.md)。
 本次收斂另補遷 `scripts/make_trisynora_schemas.py` 與 `docs/examples/trisynora/`，
 並修復 ledger 鎖定時的錯誤遮蔽與 PointFlux CLI 的 sqlite 錯誤處理。
+
+## H3 Take 匯入（第二次收斂）
+自 TRISYNORA `feat/p1-h3-real-take-gate-20261101` 僅遷移「消費端」必要功能：
+`onebridge evidence-import-h3-take`（Take 收據與媒體位元組綁定＋真實 ffprobe／ffmpeg 解碼＋寫入既有 ledger）。
+H3 專屬產生邏輯留在 minimax-H3；不遷移 `schemas/v1` 交接包與 G1–G4 治理。
+詳見 [H3_TAKE_EVIDENCE_IMPORT.md](H3_TAKE_EVIDENCE_IMPORT.md)。

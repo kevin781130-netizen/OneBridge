@@ -303,4 +303,9 @@ TRISYNORA schema validation and hash checking do not authenticate the producer,
 prove artistic/video quality, or grant human or publication approval. Vera
 retains final verification and authorization authority.
 
+An exported minimax-H3 Take copy can also be verified (Take receipt vs. real MP4 bytes,
+real ffprobe/ffmpeg decode, requires `ffmpeg` on PATH) and recorded into the same ledger with
+`onebridge evidence-import-h3-take` (exit 0 recorded, 1 blocked, 4 not verified). It never
+approves a release or imports into PointFlux. See [H3 take import](docs/H3_TAKE_EVIDENCE_IMPORT.md).
+
 Details, source SHA, and limitations: [migration note](docs/TRISYNORA_EVIDENCE_MIGRATION.md).
