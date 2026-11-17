@@ -83,24 +83,25 @@ def _outputs_from_bundle(response: dict[str, Any]) -> tuple[list[AdapterOutput],
     by_path = {path: (mime, data) for path, mime, data in extracted}
     if entry not in by_path:
         raise OpenDesignAdapterError("open_design_stdio_missing_entry")
-    mime, content = by_path[entry]
-    filename = PurePosixPath(entry).name
-    outputs = [AdapterOutput(kind="design", media_type=mime, content=content, filename=filename)]
-    if len(extracted) > 1:
+    if len(extracted) == 1:
+        mime, content = by_path[entry]
+        outputs = [AdapterOutput(
+            kind="design", media_type=mime, content=content,
+            filename=PurePosixPath(entry).name,
+        )]
+    else:
+        # OneBridge service persists only the first output per kind.
+        # Return one complete archive rather than silently losing other files.
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             for path, _mime, data in extracted:
                 info = zipfile.ZipInfo(path, date_time=(1980, 1, 1, 0, 0, 0))
                 info.compress_type = zipfile.ZIP_DEFLATED
                 archive.writestr(info, data)
-        archive_data = buf.getvalue()
-        archive_name = "open_design_sources.zip"
-        if filename == archive_name:
-            raise OpenDesignAdapterError("open_design_stdio_archive_name_collision")
-        outputs.append(AdapterOutput(
+        outputs = [AdapterOutput(
             kind="design", media_type="application/zip",
-            content=archive_data, filename=archive_name,
-        ))
+            content=buf.getvalue(), filename="open_design_sources.zip",
+        )]
     report = validate_adapter_outputs(
         outputs, expected_kind="design", max_total_bytes=MAX_ARTIFACT_BYTES,
     )
@@ -108,7 +109,7 @@ def _outputs_from_bundle(response: dict[str, Any]) -> tuple[list[AdapterOutput],
         raise OpenDesignAdapterError(
             "open_design_stdio_invalid_output:" + ";".join(report.errors)
         )
-    return outputs, {"entry_file": entry, "file_count": len(extracted)}
+    return outputs, {"entry_file": entry, "file_count": len(extracted), "archive": len(extracted) > 1}
 
 
 class OpenDesignStdioAdapter(OpenDesignMCPAdapter):
