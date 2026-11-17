@@ -117,7 +117,16 @@ class OneBridgeClient:
             adapter = adapters.get(adapter_name)
             adapter_health = adapter.get("health", {}) if isinstance(adapter, dict) else {}
             version = str(adapter.get("version", "")) if isinstance(adapter, dict) else ""
-            available[output] = bool(isinstance(adapter_health, dict) and adapter_health.get("status") == "healthy" and not version.startswith("mock-"))
+            capabilities = adapter.get("capabilities", []) if isinstance(adapter, dict) else []
+            available[output] = bool(
+                isinstance(adapter_health, dict)
+                and adapter_health.get("status") == "healthy"
+                and not version.startswith("mock-")
+                and isinstance(capabilities, list)
+                and output in capabilities
+            )
+            if output in {"code", "test_report"} and self.env.get("ONEBRIDGE_HERMES_WORKER_QUALIFIED") != "1":
+                available[output] = False
         for output in required_outputs or []:
             if output not in _ALLOWED_OUTPUTS:
                 raise BridgeError(f"unsupported_output:{output}")
@@ -129,7 +138,7 @@ class OneBridgeClient:
         clean_goal = str(goal or "").strip()
         if not clean_goal or len(clean_goal) > 20_000:
             raise BridgeError("goal_must_be_between_1_and_20000_characters")
-        outputs = [str(item).strip() for item in required_outputs]
+        outputs = sorted(str(item).strip() for item in required_outputs)
         if not outputs or len(outputs) != len(set(outputs)):
             raise BridgeError("required_outputs_must_be_nonempty_and_unique")
         unsupported = sorted(set(outputs) - _ALLOWED_OUTPUTS)
@@ -147,7 +156,7 @@ class OneBridgeClient:
         user_id = self.env.get("ONEBRIDGE_USER_ID", "").strip() or f"paperclip:{agent_id}"
         stable_request = {
             "tenant_id": self.tenant_id, "company_id": company_id, "agent_id": agent_id,
-            "issue_id": issue_id, "goal": clean_goal, "operation": operation,
+            "issue_id": issue_id, "user_id": user_id, "goal": clean_goal, "operation": operation,
             "required_outputs": outputs, "approval": approval, "network": "restricted",
             "dedupe_suffix": str(dedupe_suffix or ""),
         }
@@ -194,6 +203,8 @@ class OneBridgeClient:
         result = self.request("GET", "api/v1/tasks/" + urllib.parse.quote(task_id, safe=""))
         if not isinstance(result, dict):
             raise BridgeError("onebridge_task_status_invalid")
+        if isinstance(result.get("error"), str):
+            result["error"] = _redact(result["error"])
         return result
 
     def artifacts(self, task_id: str) -> list[dict[str, Any]]:
