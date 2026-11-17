@@ -28,7 +28,7 @@ The OneBridge API key must belong to the configured tenant. The helper refuses t
 
    Windows PowerShell:
 
-       python "$env:USERPROFILE\\.hermes\\skills\\onebridge-control\\scripts\\onebridge.py" preflight --outputs content
+       python "$env:USERPROFILE\.hermes\\skills\\onebridge-control\\scripts\\onebridge.py" preflight --outputs content
 
    macOS/Linux:
 
