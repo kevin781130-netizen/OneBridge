@@ -10,6 +10,10 @@ from onebridge.adapters.factory import build_adapter_registry
 from onebridge.adapters.open_design import OpenDesignAdapterError, OpenDesignMCPAdapter
 from onebridge.adapters.open_design_stdio import OpenDesignStdioAdapter
 from onebridge.artifacts import LocalObjectStore
+from onebridge.adapters.base import AdapterRegistry
+from onebridge.contracts import TaskContract
+from onebridge.db import Database
+from onebridge.service import OneBridgeService
 from onebridge.config import Settings
 
 
@@ -196,6 +200,37 @@ def test_opt_in_factory_and_legacy_http_unchanged(tmp_path: Path):
     cfg.open_design_stdio_command = ()
     cfg.open_design_mcp_url = "http://127.0.0.1:9000/mcp"
     assert isinstance(build_adapter_registry(cfg, store=store).get("open_design"), OpenDesignMCPAdapter)
+
+
+
+def test_real_service_persists_complete_archive_from_mock_od(tmp_path: Path):
+    db = Database(f"sqlite:///{tmp_path / 'db.sqlite'}")
+    db.create_all()
+    store = LocalObjectStore(tmp_path / "objects")
+    client = FakeOdClient(responses())
+    adapter = OpenDesignStdioAdapter(
+        client_factory=lambda: client, store=store, poll_seconds=0.001,
+    )
+    registry = AdapterRegistry()
+    registry.register(adapter)
+    service = OneBridgeService(db, registry, store)
+    contract = TaskContract.model_validate({
+        "input": {
+            "goal": "Design a landing page",
+            "required_outputs": ["design"],
+        },
+        "context": {"tenant_id": "tenant", "user_id": "user"},
+        "policy": {"approval": "none"},
+    })
+    service.submit(contract)
+    result = service.run(contract.task_id)
+    assert result["status"] == "succeeded"
+    artifacts = service.artifacts(contract.task_id)
+    assert len(artifacts) == 1
+    assert artifacts[0].media_type == "application/zip"
+    stored = store.get_file(artifacts[0].uri, tmp_path / "persisted.zip")
+    with zipfile.ZipFile(stored) as z:
+        assert sorted(z.namelist()) == ["site/index.html", "site/styles.css"]
 
 
 def test_factory_rejects_both_transports(tmp_path: Path):
