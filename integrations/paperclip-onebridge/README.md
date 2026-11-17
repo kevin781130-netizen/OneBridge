@@ -45,8 +45,10 @@ Run:
 
 The helper requires:
 - API-key authentication enabled;
-- durable task queue enabled;
-- a healthy, non-mock adapter for each requested output.
+- durable task queue configured;
+- a healthy, non-mock adapter that declares the requested output capability.
+
+Preflight verifies queue configuration, not that a worker process is currently alive. A wait timeout leaves the durable task in OneBridge and does not cancel it.
 
 Output routing follows OneBridge's current routes:
 
@@ -56,7 +58,7 @@ Output routing follows OneBridge's current routes:
 | design | open_design |
 | code, test_report | hermes |
 
-The current OneBridge Hermes command adapter requires a strong sandbox. Its present sandbox implementation does not support native Windows workers and isolates network access on Linux/macOS. Therefore code/test-report jobs must remain blocked by preflight until an appropriate qualified worker backend is available. This integration does not weaken that sandbox.
+The current OneBridge Hermes command adapter requires a strong sandbox. Its present sandbox implementation does not support native Windows workers and isolates network access on Linux/macOS. Therefore code/test-report jobs are blocked by preflight by default. Only an operator may set ONEBRIDGE_HERMES_WORKER_QUALIFIED=1 after real end-to-end qualification of the worker and its model connectivity. This integration does not weaken that sandbox.
 
 ## Operator approval
 
