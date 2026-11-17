@@ -63,6 +63,45 @@ Binary artifacts may use `content_base64`. A plain MCP text result is accepted
 as a single text/HTML design fallback. Every output passes OneBridge filename,
 media-type, size, and required-kind validation before artifact persistence.
 
+## Native OpenDesign stdio adapter (nexu-io/open-design)
+
+The HTTP adapter above is for generic MCP HTTP servers implementing the
+OneBridge design-result contract. The upstream OpenDesign `od mcp` tool
+uses **stdio** and an asynchronous workflow, not `render_design`.
+Select the native bridge explicitly; do not set the HTTP URL at the same time.
+
+```bash
+export ONEBRIDGE_OPEN_DESIGN_STDIO_CMD_JSON='["node","/absolute/path/to/open-design/apps/daemon/bin/od.mjs","mcp","--daemon-url","http://127.0.0.1:7457"]'
+export ONEBRIDGE_OPEN_DESIGN_TIMEOUT_SECONDS=600
+```
+
+Install OpenDesign separately and start its daemon according to its own
+instructions. The command is an explicit JSON argv array (no shell);
+`.cmd`, `.bat`, and PowerShell launchers are rejected. On Windows use a
+native `node.exe` plus an absolute `od.mjs` path.
+
+The OneBridge adapter follows the upstream tool contract:
+
+`list_projects -> create_project (only if absent) -> start_run -> get_run -> get_artifact`
+
+- A deterministic project id and `requestId` tie each upstream run to the
+  OneBridge task, avoiding a second run on ordinary replay. Ambiguous writes
+  are never automatically retried.
+- The adapter waits for a terminal run status and then requests all project
+  source files. A single file becomes one design output. Multi-file designs
+  include the entry file **and** `open_design_sources.zip` with original
+  relative paths, preserving CSS/JS references for later reconstruction.
+- Incomplete/truncated results, duplicate or unsafe paths, binary assets that
+  the upstream MCP `get_artifact` cannot return, and oversized payloads fail
+  closed. This first iteration intentionally supports text-source projects;
+  it does not claim full binary media support.
+- The adapter does not embed or vendor OpenDesign. Its `health()` result
+  means only that the stdio command is configured, **not** that live
+  qualification passed. Production promotion still requires explicit
+  `onebridge qualify --adapter open_design` against a real installation.
+- Tests use an isolated fake stdio MCP server. No OpenDesign account,
+  provider key, model run or production daemon is needed for contract tests.
+
 ## Hermes isolated command bridge
 
 Configure an executable and an argv template. OneBridge never invokes a shell.
