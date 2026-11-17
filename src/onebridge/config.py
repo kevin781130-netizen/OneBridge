@@ -123,6 +123,10 @@ class Settings:
     )
 
     open_design_mcp_url: str | None = os.getenv("ONEBRIDGE_OPEN_DESIGN_MCP_URL")
+    open_design_stdio_command: tuple[str, ...] = _env_json_list(
+        "ONEBRIDGE_OPEN_DESIGN_STDIO_CMD_JSON",
+        (),
+    )
     open_design_tool: str = os.getenv(
         "ONEBRIDGE_OPEN_DESIGN_TOOL",
         "render_design",
