@@ -1,0 +1,73 @@
+# Paperclip + Hermes + OneBridge bridge
+
+This integration deliberately uses Paperclip's built-in Hermes runtime and OneBridge's existing REST control plane. It does not add a custom Paperclip Agent Runtime or modify either upstream project.
+
+## Responsibilities
+
+- Paperclip: company, agents, goals, budgets, issue assignment, and heartbeat scheduling.
+- Hermes Agent: reasoning, web search, browser research, and tool selection. Use Paperclip's built-in hermes_local or hermes_gateway adapter.
+- OneBridge: durable production tasks, worker dispatch, artifact manifests, approval state, audit, and release-gate evaluation.
+
+Hermes calls OneBridge through the onebridge-control Hermes skill. This avoids a second Paperclip-to-OneBridge task scheduler and keeps Paperclip's native Hermes heartbeat contract intact.
+
+## Install the Hermes skill
+
+Copy the complete skills/onebridge-control directory into the Hermes skills directory:
+
+- Windows: %USERPROFILE%\.hermes\skills\onebridge-control\
+- macOS/Linux: ~/.hermes/skills/onebridge-control/
+
+The directory must contain SKILL.md and scripts/onebridge.py. Paperclip's built-in Hermes adapter scans Hermes-installed skills under ~/.hermes/skills/ (or the configured HERMES_HOME).
+
+## Configure the Paperclip-managed Hermes agent
+
+Provide the following environment values through the agent's protected environment configuration. Do not put API keys in the prompt template.
+
+    ONEBRIDGE_BASE_URL=http://127.0.0.1:8080
+    ONEBRIDGE_API_KEY=ob_<workspace-scoped-key>
+    ONEBRIDGE_TENANT_ID=ws_<workspace-id>
+    ONEBRIDGE_USER_ID=paperclip:<agent-id>
+
+For a remote OneBridge service, use HTTPS and a private network. Plain HTTP is accepted only for loopback addresses.
+
+On OneBridge, enable:
+
+    ONEBRIDGE_REQUIRE_API_KEY=true
+    ONEBRIDGE_TASK_QUEUE_URL=postgresql://...
+
+Run the OneBridge API and durable worker. The API key's workspace must match ONEBRIDGE_TENANT_ID.
+
+## Preflight and current output limits
+
+Run:
+
+    python onebridge.py preflight
+
+The helper requires:
+- API-key authentication enabled;
+- durable task queue enabled;
+- a healthy, non-mock adapter for each requested output.
+
+Output routing follows OneBridge's current routes:
+
+| Output | Required adapter |
+|---|---|
+| content | flowise |
+| design | open_design |
+| code, test_report | hermes |
+
+The current OneBridge Hermes command adapter requires a strong sandbox. Its present sandbox implementation does not support native Windows workers and isolates network access on Linux/macOS. Therefore code/test-report jobs must remain blocked by preflight until an appropriate qualified worker backend is available. This integration does not weaken that sandbox.
+
+## Operator approval
+
+The normal agent key can submit and inspect tasks, but cannot approve artifacts through this helper. The optional approve command requires a separate operator-only ONEBRIDGE_APPROVER_API_KEY and ONEBRIDGE_APPROVER_ID. Do not expose those values to autonomous Hermes agents.
+
+The helper intentionally exposes no release, retry, or cancel command. In particular, the current OneBridge cancel endpoint updates task state but does not yet prove that an already-running worker process has stopped.
+
+## Tests
+
+The bridge uses only the Python standard library. Its contract tests live in the repository's normal tests suite and run with:
+
+    python -m pytest tests/test_paperclip_onebridge_bridge.py
+
+No live Paperclip, Hermes, OneBridge server, payment provider, or autonomous agent is required for these tests.
