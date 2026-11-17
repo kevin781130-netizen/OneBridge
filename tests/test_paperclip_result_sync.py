@@ -48,9 +48,9 @@ class ResultSyncTests(unittest.TestCase):
         from contextlib import ExitStack
         ctx = ExitStack()
         self.addCleanup(ctx.close)
-        issue = {"id": "issue-1", "companyId": "company-1", "assigneeAgentId": assignee,
+        issue = {"id": "issue-1", "companyId": "company-1", "assigneeAgentId": "agent-1",
                  "title": "Write launch copy", "description": "Keep it verifiable.",
-                 "status": issue_status}
+                 "status": "todo"
         state = {"status": status, "artifacts": artifacts or [], "tenant": tenant,
                  "products": [], "writes": [], "ob_reads": 0}
         class PC(Handler):
@@ -107,6 +107,10 @@ class ResultSyncTests(unittest.TestCase):
         client = hb.Client(hb.Config(pc, "paperclip-read-key", "company-1",
                                     ob, "onebridge-key", "tenant-1", "x" * 40))
         expected = rs.contract_for_issue(client, "issue-1", "agent-1")
+        # Mutate the authoritative fake issue *after* deriving the expected ID,
+        # so rejection tests exercise sync() rather than fixture initialization.
+        issue["assigneeAgentId"] = assignee
+        issue["status"] = issue_status
         state["project_id"] = expected["project_id"]
         state["task_id"] = expected["task_id"]
         return client, state
