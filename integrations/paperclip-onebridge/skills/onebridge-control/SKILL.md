@@ -38,11 +38,23 @@ The OneBridge API key must belong to the configured tenant. The helper refuses t
 
 3. Submit with the narrowest required output set. The default approval policy is before_publish, and network policy is always restricted:
 
+   Windows PowerShell:
+
+       python "$env:USERPROFILE\.hermes\skills\onebridge-control\scripts\onebridge.py" submit --goal-file task-brief.md --outputs content
+
+   macOS/Linux:
+
        python "$HOME/.hermes/skills/onebridge-control/scripts/onebridge.py" submit --goal-file task-brief.md --outputs content
 
    Supported output types are content, design, code, and test_report. Preflight checks adapter health and capabilities. Code and test_report are deliberately blocked unless an operator has set ONEBRIDGE_HERMES_WORKER_QUALIFIED=1 after a real end-to-end worker qualification. Do not set that flag yourself. If an adapter is unavailable, stop and report the blocker; do not submit anyway.
 
 4. Record the returned task_id. Wait for completion:
+
+   Windows PowerShell:
+
+       python "$env:USERPROFILE\.hermes\skills\onebridge-control\scripts\onebridge.py" wait --task-id TASK_ID --timeout-sec 300
+
+   macOS/Linux:
 
        python "$HOME/.hermes/skills/onebridge-control/scripts/onebridge.py" wait --task-id TASK_ID --timeout-sec 300
 
@@ -50,11 +62,23 @@ The OneBridge API key must belong to the configured tenant. The helper refuses t
 
 5. Inspect artifacts:
 
+   Windows PowerShell:
+
+       python "$env:USERPROFILE\.hermes\skills\onebridge-control\scripts\onebridge.py" artifacts --task-id TASK_ID
+
+   macOS/Linux:
+
        python "$HOME/.hermes/skills/onebridge-control/scripts/onebridge.py" artifacts --task-id TASK_ID
 
 6. If the task reaches waiting_approval, stop and ask the authorized human approver to review it. Do not approve your own output. The approve command requires a separate ONEBRIDGE_APPROVER_API_KEY and ONEBRIDGE_APPROVER_ID; those credentials must not be installed in an autonomous agent's environment.
 
 7. Before any operator-controlled release, inspect the read-only gate:
+
+   Windows PowerShell:
+
+       python "$env:USERPROFILE\.hermes\skills\onebridge-control\scripts\onebridge.py" release-gate --task-id TASK_ID
+
+   macOS/Linux:
 
        python "$HOME/.hermes/skills/onebridge-control/scripts/onebridge.py" release-gate --task-id TASK_ID
 
