@@ -118,6 +118,32 @@ def test_preflight_requires_authenticated_durable_queue_and_real_adapter():
     assert calls == [("GET", "health")]
 
 
+def test_preflight_blocks_hermes_until_worker_backend_is_qualified():
+    adapter_registry = [
+        {"name": "hermes", "version": "command-v1", "health": {"status": "healthy"}, "capabilities": ["code", "test_report"]}
+    ]
+    client = bridge.OneBridgeClient(env=env(), opener=object())
+
+    def request(method, path, body=None, *, api_key=None):
+        if path == "health":
+            return {"ok": True, "auth_required": True, "task_queue_enabled": True}
+        if path == "api/v1/adapters":
+            return adapter_registry
+        raise AssertionError(path)
+
+    client.request = request
+    try:
+        client.preflight(["code"])
+    except bridge.BridgeError as exc:
+        assert "required_output_adapter_unavailable:code" in str(exc)
+    else:
+        raise AssertionError("Hermes worker must remain blocked until explicitly qualified")
+
+    qualified = bridge.OneBridgeClient(env=env(ONEBRIDGE_HERMES_WORKER_QUALIFIED="1"), opener=object())
+    qualified.request = request
+    assert qualified.preflight(["code"])["available_outputs"]["code"] is True
+
+
 def test_submit_recovers_duplicate_409_without_creating_second_task():
     base = "http://127.0.0.1:8080"
     task_id = "pc_" + "a" * 40
@@ -132,6 +158,7 @@ def test_submit_recovers_duplicate_409_without_creating_second_task():
                 "name": "flowise",
                 "version": "1.0.0",
                 "health": {"status": "healthy"},
+                "capabilities": ["content"],
             }
         ])
 
