@@ -5,6 +5,7 @@ import urllib.parse
 from onebridge.artifacts import LocalObjectStore, S3ObjectStore
 from onebridge.config import Settings
 from onebridge.mcp_http import McpHttpClient
+from onebridge.mcp_stdio import McpStdioClient
 from onebridge.network_policy import EgressPolicy, EgressRule
 from onebridge.sdk import AdapterPluginContext, load_adapter_plugins
 
@@ -13,6 +14,7 @@ from .flowise import FlowisePredictionAdapter
 from .hermes import HermesCommandAdapter
 from .mock import MockAdapter
 from .open_design import OpenDesignMCPAdapter
+from .open_design_stdio import OpenDesignStdioAdapter
 
 
 ObjectStore = LocalObjectStore | S3ObjectStore
@@ -81,7 +83,22 @@ def build_adapter_registry(
     else:
         registry.register(MockAdapter("flowise", ["content"]))
 
-    if settings.open_design_mcp_url:
+    if settings.open_design_mcp_url and settings.open_design_stdio_command:
+        raise ValueError("Open Design HTTP and stdio transports are mutually exclusive")
+    if settings.open_design_stdio_command:
+        if store is None:
+            raise ValueError("Open Design stdio adapter requires an object store")
+        registry.register(
+            OpenDesignStdioAdapter(
+                client_factory=lambda: McpStdioClient(
+                    command=settings.open_design_stdio_command,
+                    timeout_seconds=settings.open_design_timeout_seconds,
+                ),
+                store=store,
+                timeout_seconds=settings.open_design_timeout_seconds,
+            )
+        )
+    elif settings.open_design_mcp_url:
         if store is None:
             raise ValueError(
                 "Open Design adapter requires an object store"
