@@ -88,9 +88,10 @@ The OneBridge adapter follows the upstream tool contract:
   OneBridge task, avoiding a second run on ordinary replay. Ambiguous writes
   are never automatically retried.
 - The adapter waits for a terminal run status and then requests all project
-  source files. A single file becomes one design output. Multi-file designs
-  include the entry file **and** `open_design_sources.zip` with original
-  relative paths, preserving CSS/JS references for later reconstruction.
+  source files. A single text file is a previewable design output. A multi-file
+  project becomes **one** `open_design_sources.zip` design artifact with
+  original paths, because OneBridge persists only one artifact per kind.
+  ZIP output preserves source integrity but is not an inline HTML preview.
 - Incomplete/truncated results, duplicate or unsafe paths, binary assets that
   the upstream MCP `get_artifact` cannot return, and oversized payloads fail
   closed. This first iteration intentionally supports text-source projects;
