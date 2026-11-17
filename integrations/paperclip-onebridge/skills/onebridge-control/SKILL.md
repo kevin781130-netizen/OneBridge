@@ -12,15 +12,13 @@ Hermes remains responsible for web research, browsing, source verification, and 
 
 ## Required environment
 
-The helper reads these environment variables. Never print or place their values in prompts, comments, or logs.
+Configure only these OneBridge values in the Paperclip Hermes agent's protected environment settings. Never print or place credential values in prompts, comments, or logs.
 
 - ONEBRIDGE_BASE_URL: OneBridge service root, for example http://127.0.0.1:8080. Remote endpoints must use HTTPS.
-- ONEBRIDGE_API_KEY: a workspace-scoped OneBridge API key.
-- ONEBRIDGE_TENANT_ID: the workspace ID matching that API key.
-- PAPERCLIP_TASK_ID or PAPERCLIP_ISSUE_ID: current Paperclip issue ID.
-- PAPERCLIP_COMPANY_ID and PAPERCLIP_AGENT_ID: optional trace metadata.
+- ONEBRIDGE_API_KEY: workspace-scoped OneBridge API key.
+- ONEBRIDGE_TENANT_ID: the workspace ID matching that key.
 
-The OneBridge API key must belong to the configured tenant. The helper refuses to operate if API-key authentication or the durable task queue is disabled.
+Paperclip injects PAPERCLIP_API_URL, PAPERCLIP_API_KEY, PAPERCLIP_AGENT_ID, PAPERCLIP_COMPANY_ID, and PAPERCLIP_RUN_ID for local Hermes runs. PAPERCLIP_TASK_ID is supplied when a task triggered the wake. Do not configure or override any PAPERCLIP_* identity variable or copy PAPERCLIP_API_KEY into ONEBRIDGE_API_KEY. The helper verifies the live Paperclip agent/company identity using the short-lived Paperclip token and separately verifies the OneBridge key's workspace.
 
 ## Workflow
 
@@ -28,7 +26,7 @@ The OneBridge API key must belong to the configured tenant. The helper refuses t
 
    Windows PowerShell:
 
-       python "$env:USERPROFILE\.hermes\\skills\\onebridge-control\\scripts\\onebridge.py" preflight --outputs content
+       python "$env:USERPROFILE\.hermes\\skills\\onebridge-control\\scripts\\onebridge.py" preflight --paperclip-context --outputs content
 
    macOS/Linux:
 

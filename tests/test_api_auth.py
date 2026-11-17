@@ -30,6 +30,11 @@ def test_api_requires_key_and_enforces_tenant(tmp_path: Path):
     _, raw = identities.create_api_key(workspace.id, "test")
     headers = {"Authorization": f"Bearer {raw}"}
 
+    assert client.get("/api/v1/auth/me").status_code == 401
+    identity = client.get("/api/v1/auth/me", headers=headers)
+    assert identity.status_code == 200
+    assert identity.json() == {"workspace_id": workspace.id}
+
     payload = {
         "input": {"goal": "Build page", "required_outputs": ["content"]},
         "context": {"tenant_id": workspace.id, "user_id": "u1"},

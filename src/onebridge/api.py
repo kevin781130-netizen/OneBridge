@@ -256,6 +256,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "task_queue_enabled": task_scheduler is not None,
         }
 
+    @app.get("/api/v1/auth/me")
+    def auth_identity(auth: AuthContext | None = Depends(current_auth)) -> dict:
+        if auth is None:
+            raise HTTPException(
+                status_code=403,
+                detail="API key authentication is required",
+            )
+        return {"workspace_id": auth.workspace_id}
+
     @app.get("/api/v1/adapters")
     def adapters(auth: AuthContext | None = Depends(current_auth)) -> list[dict]:
         result = []

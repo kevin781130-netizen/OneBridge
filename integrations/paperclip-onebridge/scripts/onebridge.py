@@ -43,6 +43,24 @@ def normalize_base_url(value: str) -> str:
         raise BridgeError("onebridge_remote_http_requires_https")
     return raw.rstrip("/")
 
+def normalize_paperclip_api_url(value: str) -> str:
+    raw = str(value or "").strip()
+    try:
+        parsed = urllib.parse.urlsplit(raw)
+    except ValueError as exc:
+        raise BridgeError("paperclip_api_url_invalid") from exc
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise BridgeError("paperclip_api_url_must_be_http_or_https")
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise BridgeError("paperclip_api_url_must_not_contain_credentials_query_or_fragment")
+    if parsed.scheme == "http" and parsed.hostname.lower() not in {"localhost", "127.0.0.1", "::1"}:
+        raise BridgeError("paperclip_remote_http_requires_https")
+    path = parsed.path.rstrip("/")
+    if not path.endswith("/api") and path != "/api":
+        path = path + "/api"
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
+
+
 def _canonical_json(value: Mapping[str, Any]) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -100,7 +118,64 @@ class OneBridgeClient:
             raise HttpStatusError(status, _json_or_empty(raw))
         return _json_or_empty(raw)
 
-    def preflight(self, required_outputs: list[str] | None = None) -> dict[str, Any]:
+    def paperclip_identity(self) -> dict[str, Any]:
+        required = (
+            "PAPERCLIP_API_URL",
+            "PAPERCLIP_API_KEY",
+            "PAPERCLIP_AGENT_ID",
+            "PAPERCLIP_COMPANY_ID",
+            "PAPERCLIP_RUN_ID",
+        )
+        missing = [name for name in required if not self.env.get(name, "").strip()]
+        if missing:
+            raise BridgeError("paperclip_runtime_context_missing:" + ",".join(missing))
+
+        api_base = normalize_paperclip_api_url(self.env["PAPERCLIP_API_URL"])
+        request = urllib.request.Request(
+            api_base + "/agents/me",
+            headers={
+                "Accept": "application/json",
+                "Authorization": "Bearer " + self.env["PAPERCLIP_API_KEY"].strip(),
+            },
+            method="GET",
+        )
+        try:
+            with self.opener.open(request, timeout=self.timeout_seconds) as response:
+                raw = response.read()
+                status = int(getattr(response, "status", 200))
+        except urllib.error.HTTPError as exc:
+            raise BridgeError(f"paperclip_http_{int(exc.code)}") from None
+        except urllib.error.URLError as exc:
+            raise BridgeError("paperclip_transport_error") from exc
+        except TimeoutError:
+            raise BridgeError("paperclip_request_timeout") from None
+        if not 200 <= status < 300:
+            raise BridgeError(f"paperclip_http_{status}")
+        identity = _json_or_empty(raw)
+        if not isinstance(identity, dict):
+            raise BridgeError("paperclip_identity_response_invalid")
+        if identity.get("id") != self.env["PAPERCLIP_AGENT_ID"]:
+            raise BridgeError("paperclip_agent_identity_mismatch")
+        if identity.get("companyId") != self.env["PAPERCLIP_COMPANY_ID"]:
+            raise BridgeError("paperclip_company_identity_mismatch")
+        return {
+            "verified": True,
+            "agent_context": True,
+            "company_context": True,
+            "run_context": True,
+            "task_context_present": bool(
+                self.env.get("PAPERCLIP_TASK_ID", "").strip()
+                or self.env.get("PAPERCLIP_ISSUE_ID", "").strip()
+            ),
+        }
+
+    def preflight(
+        self,
+        required_outputs: list[str] | None = None,
+        *,
+        require_paperclip_context: bool = False,
+    ) -> dict[str, Any]:
+        paperclip = self.paperclip_identity() if require_paperclip_context else None
         health = self.request("GET", "health")
         if not isinstance(health, dict) or health.get("ok") is not True:
             raise BridgeError("onebridge_health_check_failed")
@@ -108,6 +183,9 @@ class OneBridgeClient:
             raise BridgeError("onebridge_api_key_auth_must_be_enabled")
         if health.get("task_queue_enabled") is not True:
             raise BridgeError("onebridge_durable_task_queue_must_be_enabled")
+        identity = self.request("GET", "api/v1/auth/me")
+        if not isinstance(identity, dict) or identity.get("workspace_id") != self.tenant_id:
+            raise BridgeError("onebridge_tenant_scope_mismatch")
         raw_adapters = self.request("GET", "api/v1/adapters")
         if not isinstance(raw_adapters, list):
             raise BridgeError("onebridge_adapter_registry_response_invalid")
@@ -132,7 +210,16 @@ class OneBridgeClient:
                 raise BridgeError(f"unsupported_output:{output}")
             if not available.get(output, False):
                 raise BridgeError(f"required_output_adapter_unavailable:{output}")
-        return {"ok": True, "auth_required": True, "task_queue_enabled": True, "available_outputs": available}
+        result = {
+            "ok": True,
+            "auth_required": True,
+            "tenant_verified": True,
+            "task_queue_enabled": True,
+            "available_outputs": available,
+        }
+        if paperclip is not None:
+            result["paperclip"] = paperclip
+        return result
 
     def build_task_payload(self, goal: str, required_outputs: list[str], *, operation: str = "paperclip.issue.execute", approval: str = "before_publish", dedupe_suffix: str = "") -> dict[str, Any]:
         clean_goal = str(goal or "").strip()
@@ -181,7 +268,7 @@ class OneBridgeClient:
 
     def submit(self, goal: str, required_outputs: list[str], *, operation: str = "paperclip.issue.execute", approval: str = "before_publish", dedupe_suffix: str = "") -> dict[str, Any]:
         payload = self.build_task_payload(goal, required_outputs, operation=operation, approval=approval, dedupe_suffix=dedupe_suffix)
-        self.preflight(required_outputs)
+        self.preflight(required_outputs, require_paperclip_context=True)
         task_id = payload["task_id"]
         reused = False
         try:
@@ -266,6 +353,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     preflight = sub.add_parser("preflight", help="Check OneBridge authentication, queue, and real adapters.")
     preflight.add_argument("--outputs", default="")
+    preflight.add_argument(
+        "--paperclip-context",
+        action="store_true",
+        help="Verify the current Paperclip agent, company, and run identity via its read-only API.",
+    )
     submit = sub.add_parser("submit", help="Submit an idempotent, review-gated OneBridge task.")
     goal = submit.add_mutually_exclusive_group(required=True)
     goal.add_argument("--goal")
@@ -296,7 +388,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         client = OneBridgeClient()
         if args.command == "preflight":
-            _emit(client.preflight(_parse_outputs(args.outputs)))
+            _emit(client.preflight(
+                _parse_outputs(args.outputs),
+                require_paperclip_context=args.paperclip_context,
+            ))
         elif args.command == "submit":
             goal = args.goal
             if args.goal_file:

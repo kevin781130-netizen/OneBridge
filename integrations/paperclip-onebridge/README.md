@@ -21,12 +21,13 @@ The directory must contain SKILL.md and scripts/onebridge.py. Paperclip's built-
 
 ## Configure the Paperclip-managed Hermes agent
 
-Provide the following environment values through the agent's protected environment configuration. Do not put API keys in the prompt template.
+Provide only the following OneBridge values through the agent's protected environment configuration. Do not put API keys in the prompt template.
 
     ONEBRIDGE_BASE_URL=http://127.0.0.1:8080
     ONEBRIDGE_API_KEY=ob_<workspace-scoped-key>
     ONEBRIDGE_TENANT_ID=ws_<workspace-id>
-    ONEBRIDGE_USER_ID=paperclip:<agent-id>
+
+Paperclip injects PAPERCLIP_API_URL, PAPERCLIP_API_KEY, PAPERCLIP_AGENT_ID, PAPERCLIP_COMPANY_ID, and PAPERCLIP_RUN_ID for local Hermes runs; PAPERCLIP_TASK_ID is present when a task triggered the wake. Do not manually configure or override PAPERCLIP_API_KEY. Preflight uses that short-lived run token only for the read-only GET /api/agents/me identity check.
 
 For a remote OneBridge service, use HTTPS and a private network. Plain HTTP is accepted only for loopback addresses.
 
@@ -41,12 +42,15 @@ Run the OneBridge API and durable worker. The API key's workspace must match ONE
 
 Run:
 
-    python onebridge.py preflight
+    python onebridge.py preflight --paperclip-context --outputs content
 
-The helper requires:
-- API-key authentication enabled;
-- durable task queue configured;
-- a healthy, non-mock adapter that declares the requested output capability.
+The read-only preflight verifies:
+- Paperclip's current run token via GET /api/agents/me, matching injected agent ID and company ID;
+- OneBridge API-key authentication and exact workspace/tenant match via GET /api/v1/auth/me;
+- durable task queue configuration;
+- healthy, non-mock adapters that declare the requested output capability.
+
+It never creates a task, dispatches a worker, approves an artifact, or changes state.
 
 Preflight verifies queue configuration, not that a worker process is currently alive. A wait timeout leaves the durable task in OneBridge and does not cancel it.
 

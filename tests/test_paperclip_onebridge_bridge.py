@@ -54,6 +54,8 @@ def env(**extra):
         "ONEBRIDGE_BASE_URL": "http://127.0.0.1:8080",
         "ONEBRIDGE_API_KEY": "ob_test_key",
         "ONEBRIDGE_TENANT_ID": "ws_test",
+        "PAPERCLIP_API_URL": "http://127.0.0.1:3100",
+        "PAPERCLIP_API_KEY": "pc_test_jwt",
         "PAPERCLIP_COMPANY_ID": "company-1",
         "PAPERCLIP_AGENT_ID": "agent-1",
         "PAPERCLIP_TASK_ID": "issue-1",
@@ -77,6 +79,52 @@ def test_rejects_remote_plain_http_and_url_credentials():
         assert "credentials" in str(exc)
     else:
         raise AssertionError("URL credentials must be rejected")
+
+
+def test_normalize_paperclip_api_url_appends_api_once_and_rejects_remote_http():
+    assert bridge.normalize_paperclip_api_url("http://127.0.0.1:3100") == "http://127.0.0.1:3100/api"
+    assert bridge.normalize_paperclip_api_url("https://paperclip.example/api/") == "https://paperclip.example/api"
+    try:
+        bridge.normalize_paperclip_api_url("http://paperclip.example")
+    except bridge.BridgeError as exc:
+        assert "https" in str(exc)
+    else:
+        raise AssertionError("remote Paperclip HTTP must be rejected")
+
+
+def test_paperclip_identity_uses_run_token_and_verifies_agent_company():
+    url = "http://127.0.0.1:3100/api/agents/me"
+
+    def identity(request, _timeout):
+        assert request.get_header("Authorization") == "Bearer pc_test_jwt"
+        return FakeResponse({"id": "agent-1", "companyId": "company-1"})
+
+    opener = FakeOpener({("GET", url): identity})
+    client = bridge.OneBridgeClient(env=env(), opener=opener)
+    result = client.paperclip_identity()
+    assert result == {
+        "verified": True,
+        "agent_context": True,
+        "company_context": True,
+        "run_context": True,
+        "task_context_present": True,
+    }
+
+
+def test_paperclip_identity_rejects_wrong_agent_or_company():
+    url = "http://127.0.0.1:3100/api/agents/me"
+    opener = FakeOpener({
+        ("GET", url): lambda _request, _timeout: FakeResponse(
+            {"id": "agent-other", "companyId": "company-1"}
+        )
+    })
+    client = bridge.OneBridgeClient(env=env(), opener=opener)
+    try:
+        client.paperclip_identity()
+    except bridge.BridgeError as exc:
+        assert "paperclip_agent_identity_mismatch" in str(exc)
+    else:
+        raise AssertionError("wrong Paperclip agent must be rejected")
 
 
 def test_task_id_is_stable_across_paperclip_heartbeats():
@@ -118,6 +166,25 @@ def test_preflight_requires_authenticated_durable_queue_and_real_adapter():
     assert calls == [("GET", "health")]
 
 
+def test_preflight_rejects_onebridge_key_for_wrong_tenant():
+    client = bridge.OneBridgeClient(env=env(), opener=object())
+
+    def request(method, path, body=None, *, api_key=None):
+        if path == "health":
+            return {"ok": True, "auth_required": True, "task_queue_enabled": True}
+        if path == "api/v1/auth/me":
+            return {"workspace_id": "ws_someone_else"}
+        raise AssertionError("adapter discovery must stop after tenant mismatch")
+
+    client.request = request
+    try:
+        client.preflight(["content"])
+    except bridge.BridgeError as exc:
+        assert "onebridge_tenant_scope_mismatch" in str(exc)
+    else:
+        raise AssertionError("tenant mismatch must be blocked")
+
+
 def test_preflight_blocks_hermes_until_worker_backend_is_qualified():
     adapter_registry = [
         {"name": "hermes", "version": "command-v1", "health": {"status": "healthy"}, "capabilities": ["code", "test_report"]}
@@ -127,6 +194,8 @@ def test_preflight_blocks_hermes_until_worker_backend_is_qualified():
     def request(method, path, body=None, *, api_key=None):
         if path == "health":
             return {"ok": True, "auth_required": True, "task_queue_enabled": True}
+        if path == "api/v1/auth/me":
+            return {"workspace_id": "ws_test"}
         if path == "api/v1/adapters":
             return adapter_registry
         raise AssertionError(path)
@@ -183,7 +252,13 @@ def test_submit_recovers_duplicate_409_without_creating_second_task():
         })
 
     opener = FakeOpener({
+        ("GET", "http://127.0.0.1:3100/api/agents/me"): lambda request, _timeout: FakeResponse(
+            {"id": "agent-1", "companyId": "company-1"}
+        ),
         ("GET", base + "/health"): health,
+        ("GET", base + "/api/v1/auth/me"): lambda _request, _timeout: FakeResponse(
+            {"workspace_id": "ws_test"}
+        ),
         ("GET", base + "/api/v1/adapters"): adapters,
         ("POST", base + "/api/v1/tasks"): duplicate,
         ("GET", base + "/api/v1/tasks/" + task_id): existing,
