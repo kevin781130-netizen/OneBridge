@@ -50,7 +50,7 @@ class ResultSyncTests(unittest.TestCase):
         self.addCleanup(ctx.close)
         issue = {"id": "issue-1", "companyId": "company-1", "assigneeAgentId": "agent-1",
                  "title": "Write launch copy", "description": "Keep it verifiable.",
-                 "status": "todo"
+                 "status": "todo"}
         state = {"status": status, "artifacts": artifacts or [], "tenant": tenant,
                  "products": [], "writes": [], "ob_reads": 0}
         class PC(Handler):
