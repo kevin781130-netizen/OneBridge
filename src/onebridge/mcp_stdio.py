@@ -89,13 +89,12 @@ class McpStdioClient:
         except OSError as exc:
             raise McpStdioError("open_design_stdio_launch_failed") from exc
         assert self._process.stdout is not None
+        stdout = self._process.stdout
 
         def read_stdout() -> None:
-            assert self._process is not None
-            assert self._process.stdout is not None
             try:
                 while True:
-                    line = self._process.stdout.readline(MAX_MCP_LINE_BYTES + 2)
+                    line = stdout.readline(MAX_MCP_LINE_BYTES + 2)
                     if not line:
                         self._messages.put(None)
                         return
@@ -118,11 +117,25 @@ class McpStdioClient:
         body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8") + b"\n"
         if len(body) > MAX_MCP_LINE_BYTES:
             raise McpStdioError("open_design_stdio_request_too_large")
-        try:
-            self._process.stdin.write(body)
-            self._process.stdin.flush()
-        except (BrokenPipeError, OSError) as exc:
-            raise McpStdioError("open_design_stdio_write_failed") from exc
+        errors: list[BaseException] = []
+
+        def write_stdin() -> None:
+            try:
+                assert self._process is not None
+                assert self._process.stdin is not None
+                self._process.stdin.write(body)
+                self._process.stdin.flush()
+            except (BrokenPipeError, OSError, ValueError) as exc:
+                errors.append(exc)
+
+        writer = threading.Thread(target=write_stdin, daemon=True)
+        writer.start()
+        writer.join(timeout=self._remaining())
+        if writer.is_alive():
+            self.close()
+            raise McpStdioError("open_design_stdio_write_timeout")
+        if errors:
+            raise McpStdioError("open_design_stdio_write_failed") from errors[0]
 
     def _rpc(self, method: str, params: dict[str, Any]) -> Any:
         request_id = self._next_id
@@ -179,8 +192,6 @@ class McpStdioClient:
             return
         self._process = None
         try:
-            if proc.stdin is not None:
-                proc.stdin.close()
             if proc.poll() is None:
                 if os.name != "nt":
                     os.killpg(proc.pid, signal.SIGTERM)
@@ -197,5 +208,13 @@ class McpStdioClient:
         except (OSError, ProcessLookupError):
             pass
         finally:
+            if proc.stdin is not None:
+                try:
+                    proc.stdin.close()
+                except (OSError, ValueError):
+                    pass
             if proc.stdout is not None:
-                proc.stdout.close()
+                try:
+                    proc.stdout.close()
+                except (OSError, ValueError):
+                    pass
