@@ -24,7 +24,13 @@ The OneBridge API key must belong to the configured tenant. The helper refuses t
 
 ## Workflow
 
-1. Run preflight before submitting work:
+1. Run preflight before submitting work.
+
+   Windows PowerShell:
+
+       python "$env:USERPROFILE\\.hermes\\skills\\onebridge-control\\scripts\\onebridge.py" preflight --outputs content
+
+   macOS/Linux:
 
        python "$HOME/.hermes/skills/onebridge-control/scripts/onebridge.py" preflight --outputs content
 
@@ -34,7 +40,7 @@ The OneBridge API key must belong to the configured tenant. The helper refuses t
 
        python "$HOME/.hermes/skills/onebridge-control/scripts/onebridge.py" submit --goal-file task-brief.md --outputs content
 
-   Supported output types are content, design, code, and test_report. Preflight checks that each required output has a healthy, non-mock adapter. If an adapter is unavailable, stop and report the blocker; do not submit anyway.
+   Supported output types are content, design, code, and test_report. Preflight checks adapter health and capabilities. Code and test_report are deliberately blocked unless an operator has set ONEBRIDGE_HERMES_WORKER_QUALIFIED=1 after a real end-to-end worker qualification. Do not set that flag yourself. If an adapter is unavailable, stop and report the blocker; do not submit anyway.
 
 4. Record the returned task_id. Wait for completion:
 
