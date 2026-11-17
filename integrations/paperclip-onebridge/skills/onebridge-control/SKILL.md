@@ -26,11 +26,11 @@ Paperclip injects PAPERCLIP_API_URL, PAPERCLIP_API_KEY, PAPERCLIP_AGENT_ID, PAPE
 
    Windows PowerShell:
 
-       python "$env:USERPROFILE\.hermes\\skills\\onebridge-control\\scripts\\onebridge.py" preflight --paperclip-context --outputs content
+       python "$env:USERPROFILE\.hermes\skills\onebridge-control\scripts\onebridge.py" preflight --paperclip-context --outputs content
 
    macOS/Linux:
 
-       python "$HOME/.hermes/skills/onebridge-control/scripts/onebridge.py" preflight --outputs content
+       python "$HOME/.hermes/skills/onebridge-control/scripts/onebridge.py" preflight --paperclip-context --outputs content
 
 2. Research and prepare the task brief yourself. Include source URLs and factual constraints in the brief when relevant. Do not ask OneBridge to perform web scraping unless its selected output adapter is explicitly configured and qualified for that task.
 

@@ -5,7 +5,7 @@ This integration deliberately uses Paperclip's built-in Hermes runtime and OneBr
 ## Responsibilities
 
 - Paperclip: company, agents, goals, budgets, issue assignment, and heartbeat scheduling.
-- Hermes Agent: reasoning, web search, browser research, and tool selection. Use Paperclip's built-in hermes_local or hermes_gateway adapter.
+- Hermes Agent: reasoning, web search, browser research, and tool selection. Use Paperclip's built-in hermes_local adapter for this integration. hermes_gateway requires separate environment-transport qualification before using this skill.
 - OneBridge: durable production tasks, worker dispatch, artifact manifests, approval state, audit, and release-gate evaluation.
 
 Hermes calls OneBridge through the onebridge-control Hermes skill. This avoids a second Paperclip-to-OneBridge task scheduler and keeps Paperclip's native Hermes heartbeat contract intact.
