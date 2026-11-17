@@ -84,13 +84,12 @@ def test_native_stdio_contract_preserves_sources_and_stable_id(tmp_path: Path):
     adapter = make_adapter(tmp_path, client)
     result = adapter.execute(make_request())
     assert result.external_task_id == "od_run_1"
-    assert [o.filename for o in result.outputs] == [
-        "index.html", "open_design_sources.zip",
-    ]
+    assert [o.filename for o in result.outputs] == ["open_design_sources.zip"]
     assert result.outputs[0].kind == "design"
-    assert result.outputs[0].media_type == "text/html"
+    assert result.outputs[0].media_type == "application/zip"
     assert result.metadata["entry_file"] == "site/index.html"
-    with zipfile.ZipFile(io.BytesIO(result.outputs[1].content)) as z:
+    assert result.metadata["archive"] is True
+    with zipfile.ZipFile(io.BytesIO(result.outputs[0].content)) as z:
         assert sorted(z.namelist()) == ["site/index.html", "site/styles.css"]
         assert b"color: black" in z.read("site/styles.css")
     names = [name for name, _ in client.calls]
@@ -109,6 +108,19 @@ def test_native_stdio_contract_preserves_sources_and_stable_id(tmp_path: Path):
         "maxBytes": 18 * 1024 * 1024, "entry": "site/index.html",
     }
     assert client.closed is True
+
+
+def test_single_text_file_remains_previewable(tmp_path: Path):
+    bundle = design_bundle(files=[
+        {"name": "site/index.html", "mime": "text/html",
+         "binary": False, "content": "<h1>Only file</h1>"},
+    ])
+    client = FakeOdClient(responses(bundle))
+    result = make_adapter(tmp_path, client).execute(make_request())
+    assert len(result.outputs) == 1
+    assert result.outputs[0].filename == "index.html"
+    assert result.outputs[0].media_type == "text/html"
+    assert result.metadata["archive"] is False
 
 
 def test_existing_project_is_reused_and_start_request_id_is_stable(tmp_path: Path):
